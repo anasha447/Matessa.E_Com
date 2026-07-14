@@ -1,0 +1,78 @@
+server:
+  port: ${SERVER_PORT:9083}
+
+spring:
+  application:
+    name: order-service
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true       # wrap Feign calls in a Resilience4j circuit breaker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5535/orders}   # host-mapped orders-db port for local run
+    username: ${SPRING_DATASOURCE_USERNAME:adventure_order}
+    password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate            # Flyway owns the schema; Hibernate only validates
+    open-in-view: false
+    properties:
+      hibernate.format_sql: true
+  flyway:
+    enabled: true
+  kafka:
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: order-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:9761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://tempo:4318/v1/traces}
+
+jwt:
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
+
+# Short timeout + circuit breaker so a slow/down commercial-service can't hang checkout.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
+        cancel-running-future: true

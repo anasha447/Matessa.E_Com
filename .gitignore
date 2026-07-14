@@ -1,0 +1,68 @@
+# ===== Secrets — NEVER commit =====
+.env
+.env.*
+*.env
+secrets/
+# RS256 JWT keys
+*.pem
+*.key
+jwt-private.*
+jwt-public.*
+keys/
+
+# ===== Java / Maven =====
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+build/
+.gradle/
+
+# ===== Spring =====
+*.log
+logs/
+application-local.yml
+application-local.properties
+
+# ===== Node / Next.js (frontend) =====
+node_modules/
+.next/
+out/
+.vercel/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===== Docker =====
+# (compose file IS committed; local override + data are not)
+docker-compose.override.yml
+**/pgdata/
+**/kafka-data/
+
+# ===== IDE / Editor =====
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.settings/
+.project
+.classpath
+
+# ===== Claude Code (local agent state — not project source) =====
+.CLAUDE/
+.claude/
+
+# ===== OS junk =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Test / coverage =====
+coverage/
+*.lcov
+.nyc_output/
+
+# ===== Design source (Claude Design export — reference only, not shipped) =====
+design-source/

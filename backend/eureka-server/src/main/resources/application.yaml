@@ -1,0 +1,24 @@
+server:
+  port: ${EUREKA_PORT:9761}   # Spring Cloud's conventional Eureka port; clients target eureka-server:8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  client:
+    register-with-eureka: false        # standalone server: does not register with itself
+    fetch-registry: false              # ...nor pull a registry from a peer
+    service-url:
+      defaultZone: http://localhost:${EUREKA_PORT:9761}/eureka/   # self-reference only; inert because register/fetch are false
+  instance:
+    hostname: ${EUREKA_HOSTNAME:localhost}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info           # expose /actuator/health for the docker-compose healthcheck
+  endpoint:
+    health:
+      show-details: never

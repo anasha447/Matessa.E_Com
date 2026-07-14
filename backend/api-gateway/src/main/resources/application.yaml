@@ -1,0 +1,156 @@
+server:
+  port: ${SERVER_PORT:9080}
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}   # 'redis' in docker-compose; backs edge rate limiting
+      port: ${REDIS_PORT:6379}
+      timeout: 1s
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: user-service-auth
+              uri: ${USER_SERVICE_URI:lb://user-service}
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: userService
+                    fallbackUri: forward:/fallback/user-service
+            - id: user-service-users
+              uri: ${USER_SERVICE_URI:lb://user-service}
+              predicates:
+                - Path=/api/users/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: userService
+                    fallbackUri: forward:/fallback/user-service
+            - id: user-service-admin
+              uri: ${USER_SERVICE_URI:lb://user-service}
+              predicates:
+                - Path=/api/admin/**          # ADMIN user/staff management (AdminUserController)
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: userService
+                    fallbackUri: forward:/fallback/user-service
+            - id: commercial-categories
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/categories/**
+            - id: commercial-products
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/products/**
+            - id: commercial-variants
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/variants/**
+            - id: commercial-images
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/images/**
+            - id: commercial-media
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/media/**          # stored product images (WebP), served statically
+            - id: commercial-reviews
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/reviews/**
+            - id: commercial-wishlist
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/wishlist/**
+            - id: commercial-coupons
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/coupons/**
+            - id: commercial-discounts
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/discounts/**
+            - id: commercial-contact
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/contact/**
+            - id: commercial-subscribers
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/subscribers/**
+            - id: analytics-sales
+              uri: ${ORDER_SERVICE_URI:lb://order-service}
+              predicates:
+                - Path=/api/analytics/sales/**
+            - id: analytics-catalog
+              uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
+              predicates:
+                - Path=/api/analytics/catalog/**
+            - id: analytics-customers
+              uri: ${USER_SERVICE_URI:lb://user-service}
+              predicates:
+                - Path=/api/analytics/customers/**
+            - id: order-service
+              uri: ${ORDER_SERVICE_URI:lb://order-service}
+              predicates:
+                - Path=/api/orders/**,/api/cart/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: orderService
+                    fallbackUri: forward:/fallback/order-service
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:9761/eureka}
+  instance:
+    prefer-ip-address: true
+
+# Resilience4j: trip the breaker after sustained failures, time-limit slow upstreams.
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+      orderService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+  timelimiter:
+    instances:
+      userService:
+        timeout-duration: 5s
+      orderService:
+        timeout-duration: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://tempo:4318/v1/traces}
+
+jwt:
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}

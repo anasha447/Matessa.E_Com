@@ -1,0 +1,332 @@
+# Matessa — e-commerce stack (isolated sibling of the Adventure Dose project)
+# Boots: eureka-server (service discovery) + users-db (Postgres for user-service).
+# Add commercial-db, orders-db, kafka, redis here as you build the services that need them.
+#
+# Host ports are deliberately offset (9xxx / 55xx / 6380 / 3002 / 3201) so this stack can run
+# side-by-side with the original Adventure Dose containers (8xxx / 54xx / 6379 / 3001 / 3200)
+# on the same host. Inside the network, every service still listens on its conventional port.
+#
+# Run:    docker compose up -d
+# Stop:   docker compose down
+# Wipe:   docker compose down -v   (deletes volumes = erases DB data)
+
+name: matessa               # names the compose project (keeps it separate from the original Adventure Dose stack)
+
+services:
+
+  # ---- Service discovery ----
+  eureka-server:
+    build: ./backend/eureka-server   # Spring Boot Eureka server (folder: backend/eureka-server)
+    container_name: matessa-eureka-server
+    environment:
+      # The image serves Eureka on 8761 (Spring Cloud's conventional port); the whole stack
+      # was mistakenly targeting 8762 → nothing answered there → the "wedge". Align on 8761.
+      EUREKA_PORT: 8761
+      # Bounded heap + ParallelGC: eureka was also the only unbounded JVM on the 4 GB VM.
+      JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -Xmx256m"
+      # Dev: don't hold dead instances for minutes — evict promptly so lb:// stays accurate.
+      EUREKA_SERVER_ENABLE_SELF_PRESERVATION: "false"
+    ports:
+      - "9761:8761"           # Eureka dashboard at http://localhost:9761
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s        # give Eureka time to boot (JVM + registry) before counting failures
+
+  # ---- user-service database ----
+  users-db:
+    image: postgres:16-alpine
+    container_name: matessa-users-db
+    environment:
+      POSTGRES_DB: users
+      POSTGRES_USER: ${USERS_DB_USER}        # set in .env (never hard-code)
+      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD}
+    ports:
+      - "5533:5432"           # host 5533 -> container 5432 (original stack owns 5433)
+    volumes:
+      - matessa-users-db-data:/var/lib/postgresql/data
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USERS_DB_USER} -d users"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- user-service (identity & RS256 auth) ----
+  user-service:
+    build: ./backend/user-service
+    container_name: matessa-user-service
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://users-db:5432/users   # service NAME, internal port
+      SPRING_DATASOURCE_USERNAME: ${USERS_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${USERS_DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"   # register the bridge IP so lb:// is reachable across the compose network
+      JWT_PRIVATE_KEY_PATH: file:/app/keys/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@matessa.com}   # seeded on first boot (see .env)
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}                    # unset -> seeding skipped
+      # Same JDK-25 G1 SIGSEGV/pause insurance as commercial & order-service. Without it,
+      # GC pauses here made the gateway circuit breaker time out (503s on login/password).
+      JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -Xmx400m"   # bounded heap: 5 JVMs share a 4 GB VM; a RAM-% heap over-commits and the OOM killer strikes
+    ports:
+      - "9081:8081"           # dev convenience: Swagger UI at http://localhost:9081/swagger-ui.html
+    volumes:
+      - ./keys:/app/keys:ro          # RS256 keys mounted read-only (gitignored, never baked into the image)
+    depends_on:
+      users-db:
+        condition: service_healthy   # waits for DB readiness, not just start
+      eureka-server:
+        condition: service_started   # start-only: the Eureka client retries registration,
+                                     # so a flaky Eureka healthcheck can't block the whole stack
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s              # give Spring Boot + Flyway time to boot before counting failures
+
+  # ---- API gateway (public front door) ----
+  api-gateway:
+    build: ./backend/api-gateway
+    container_name: matessa-api-gateway
+    environment:
+      SERVER_PORT: 8080
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      # Route via Eureka + client-side load balancing. (The gateway application.yaml default is
+      # also lb:// now; these envs force it on the current image without needing a rebuild.)
+      USER_SERVICE_URI: lb://user-service
+      COMMERCIAL_SERVICE_URI: lb://commercial-service
+      ORDER_SERVICE_URI: lb://order-service
+      JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem   # gateway holds the PUBLIC key only
+      REDIS_HOST: redis                         # Phase 4: edge rate limiting
+      JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -Xmx320m"     # bounded heap (was unbounded — see eureka note)
+    volumes:
+      - ./keys:/app/keys:ro
+    ports:
+      - "9080:8080"                  # the single public entry point
+    depends_on:
+      eureka-server:
+        condition: service_started   # start-only: the Eureka client retries registration,
+                                     # so a flaky Eureka healthcheck can't block the whole stack
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---- commercial-service database ----
+  commercial-db:
+    image: postgres:16-alpine
+    container_name: matessa-commercial-db
+    environment:
+      POSTGRES_DB: commercial
+      POSTGRES_USER: ${COMMERCIAL_DB_USER}
+      POSTGRES_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
+    ports:
+      - "5534:5432"           # host 5534 -> container 5432 (offset from users-db)
+    volumes:
+      - matessa-commercial-db-data:/var/lib/postgresql/data
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${COMMERCIAL_DB_USER} -d commercial"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- commercial-service (catalog & inventory) ----
+  # Single instance on a fixed port for dev convenience. Eureka + lb:// still balance across
+  # replicas if you scale it: remove container_name + the ports mapping, then
+  # `docker compose up -d --scale commercial-service=N`.
+  commercial-service:
+    build: ./backend/commercial-service
+    container_name: matessa-commercial-service
+    environment:
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://commercial-db:5432/commercial
+      SPRING_DATASOURCE_USERNAME: ${COMMERCIAL_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"   # register the bridge IP so lb:// is reachable
+      JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem   # validates only; public key
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis                         # Phase 2: catalog cache
+      APP_MEDIA_DIR: /app/media/products        # uploaded product images (WebP), persisted below
+      # Use the Parallel GC — the JDK 25 G1 collector has crashed (SIGSEGV in
+      # G1ParScanThreadState) under load in this container; ParallelGC is stable here.
+      JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -Xmx400m"   # bounded heap: JVMs share a 4 GB VM; a RAM-% heap over-commits and the OOM killer strikes
+    ports:
+      - "9082:8082"           # dev convenience: Swagger UI at http://localhost:9082/swagger-ui.html
+    volumes:
+      - ./keys:/app/keys:ro
+      - matessa-commercial-media:/app/media             # WebP uploads survive rebuilds
+    depends_on:
+      commercial-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started   # start-only: the Eureka client retries registration,
+                                     # so a flaky Eureka healthcheck can't block the whole stack
+      kafka:
+        condition: service_started
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---- Kafka (KRaft single-node; async order events) ----
+  kafka:
+    image: apache/kafka:3.8.1
+    container_name: matessa-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092       # service name; internal-only
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ---- order-service database ----
+  orders-db:
+    image: postgres:16-alpine
+    container_name: matessa-orders-db
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: ${ORDERS_DB_USER}
+      POSTGRES_PASSWORD: ${ORDERS_DB_PASSWORD}
+    ports:
+      - "5535:5432"           # host 5535 -> container 5432 (offset from commercial-db)
+    volumes:
+      - matessa-orders-db-data:/var/lib/postgresql/data
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDERS_DB_USER} -d orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- order-service (cart, checkout, orders) ----
+  order-service:
+    build: ./backend/order-service
+    container_name: matessa-order-service
+    environment:
+      SERVER_PORT: 8083
+      SPRING_DATASOURCE_URL: jdbc:postgresql://orders-db:5432/orders   # service NAME, internal port
+      SPRING_DATASOURCE_USERNAME: ${ORDERS_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${ORDERS_DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem   # validates only; public key
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # @FeignClient(name="commercial-service") now resolves through Eureka + the Spring Cloud
+      # LoadBalancer (it round-robins across all registered commercial replicas). The old
+      # SPRING_APPLICATION_JSON static-instance workaround is gone now that Eureka is stable.
+      # Same JDK-25 G1 SIGSEGV insurance as commercial-service.
+      JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -Xmx400m"   # bounded heap: JVMs share a 4 GB VM; a RAM-% heap over-commits and the OOM killer strikes
+    ports:
+      - "9083:8083"           # dev convenience: Swagger UI at http://localhost:9083/swagger-ui.html
+    volumes:
+      - ./keys:/app/keys:ro
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started   # start-only: the Eureka client retries registration,
+                                     # so a flaky Eureka healthcheck can't block the whole stack
+      kafka:
+        condition: service_started
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---- Redis: shared cache (catalog), idempotency store, rate-limit counters ----
+  redis:
+    image: redis:7-alpine
+    container_name: matessa-redis
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lfu", "--save", ""]
+    ports:
+      - "6380:6379"           # dev convenience (redis-cli from host)
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---- Tempo: receives OTLP traces from the services, queried by Grafana ----
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: matessa-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - matessa-tempo-data:/var/tempo
+    ports:
+      - "3201:3200"           # Tempo query API (Grafana datasource)
+    networks:
+      - matessa-net
+
+  # ---- Grafana: view distributed traces (anonymous admin, dev only) ----
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: matessa-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3002:3000"           # host 3002 (original stack owns 3001; Next dev owns 3000/3100) -> Grafana UI
+    networks:
+      - matessa-net
+    depends_on:
+      - tempo
+
+volumes:
+  matessa-users-db-data:                # named volume so DB data survives restarts
+  matessa-commercial-db-data:
+  matessa-orders-db-data:
+  matessa-commercial-media:             # uploaded product images (WebP)
+  matessa-tempo-data:                   # trace blocks/WAL (dev retention only)
+
+networks:
+  matessa-net:                # private network; only this project's containers join
+    driver: bridge

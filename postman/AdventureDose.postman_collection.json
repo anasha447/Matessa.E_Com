@@ -1,0 +1,138 @@
+{
+  "info": {
+    "name": "Adventure Dose API",
+    "description": "All endpoints through the API gateway (http://localhost:8080). Run 'Auth > Login (admin)' or 'Login (customer)' first - it captures the JWT into the {{token}} collection variable, which every other request sends as a Bearer token. Seeded admin: admin@adventuredose.com / Admin123!Dose.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" }
+  ],
+  "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{token}}", "type": "string" } ] },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        { "name": "Register customer", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"email\":\"alice@example.com\",\"password\":\"password123\",\"firstName\":\"Alice\",\"lastName\":\"Adventurer\"}" }, "url": "{{baseUrl}}/api/auth/register" } },
+        { "name": "Login (admin)", "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "const j = pm.response.json();", "if (j.accessToken) { pm.collectionVariables.set('token', j.accessToken); }" ] } } ], "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"email\":\"admin@adventuredose.com\",\"password\":\"Admin123!Dose\"}" }, "url": "{{baseUrl}}/api/auth/login" } },
+        { "name": "Login (customer)", "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "const j = pm.response.json();", "if (j.accessToken) { pm.collectionVariables.set('token', j.accessToken); }" ] } } ], "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"email\":\"alice@example.com\",\"password\":\"password123\"}" }, "url": "{{baseUrl}}/api/auth/login" } },
+        { "name": "Refresh token", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"refreshToken\":\"<paste-refresh-token>\"}" }, "url": "{{baseUrl}}/api/auth/refresh" } },
+        { "name": "Logout", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"refreshToken\":\"<paste-refresh-token>\"}" }, "url": "{{baseUrl}}/api/auth/logout" } }
+      ]
+    },
+    {
+      "name": "Users & Addresses",
+      "item": [
+        { "name": "Get my profile", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/users/me" } },
+        { "name": "List addresses", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/users/me/addresses" } },
+        { "name": "Add address", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"line1\":\"1 Trail Rd\",\"line2\":null,\"city\":\"Boulder\",\"state\":\"CO\",\"postalCode\":\"80301\",\"country\":\"USA\",\"type\":\"HOME\",\"defaultAddress\":true}" }, "url": "{{baseUrl}}/api/users/me/addresses" } },
+        { "name": "Update address", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"line1\":\"2 Summit Ave\",\"line2\":\"Apt 5\",\"city\":\"Denver\",\"state\":\"CO\",\"postalCode\":\"80202\",\"country\":\"USA\",\"type\":\"WORK\",\"defaultAddress\":false}" }, "url": "{{baseUrl}}/api/users/me/addresses/:id" } },
+        { "name": "Delete address", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/users/me/addresses/:id" } }
+      ]
+    },
+    {
+      "name": "Catalog - Categories",
+      "item": [
+        { "name": "List top-level", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/categories" } },
+        { "name": "Full tree", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/categories/tree" } },
+        { "name": "Get by id", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/categories/:id" } },
+        { "name": "Children", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/categories/:id/children" } },
+        { "name": "Create (staff)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"parentId\":null,\"name\":\"Helmets\",\"slug\":\"helmets\",\"description\":\"Head protection\",\"imageUrl\":\"https://cdn.example.com/helmets.jpg\",\"displayOrder\":1}" }, "url": "{{baseUrl}}/api/categories" } },
+        { "name": "Update (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"parentId\":null,\"name\":\"Helmets\",\"slug\":\"helmets\",\"description\":\"Updated\",\"imageUrl\":\"https://cdn.example.com/helmets.jpg\",\"displayOrder\":2}" }, "url": "{{baseUrl}}/api/categories/:id" } },
+        { "name": "Delete (staff, soft)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/categories/:id" } }
+      ]
+    },
+    {
+      "name": "Catalog - Products",
+      "item": [
+        { "name": "List (optionally ?categoryId=)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products?categoryId=1" } },
+        { "name": "Get by id", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products/:id" } },
+        { "name": "Create (staff)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"categoryId\":1,\"name\":\"Trail Helmet\",\"slug\":\"trail-helmet\",\"description\":\"Lightweight\",\"basePrice\":120.00,\"brand\":\"AdventureDose\"}" }, "url": "{{baseUrl}}/api/products" } },
+        { "name": "Update (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"categoryId\":1,\"name\":\"Trail Helmet\",\"slug\":\"trail-helmet\",\"description\":\"Updated\",\"basePrice\":130.00,\"brand\":\"AdventureDose\"}" }, "url": "{{baseUrl}}/api/products/:id" } },
+        { "name": "Delete (staff, soft)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/products/:id" } }
+      ]
+    },
+    {
+      "name": "Catalog - Variants",
+      "item": [
+        { "name": "List for product", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products/:productId/variants" } },
+        { "name": "Create (staff)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"sku\":\"TH-RED-M\",\"size\":\"M\",\"color\":\"Red\",\"priceOverride\":null,\"stockQuantity\":10,\"restockLevel\":3}" }, "url": "{{baseUrl}}/api/products/:productId/variants" } },
+        { "name": "Price/stock lookup (order-facing)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/variants/:id" } },
+        { "name": "Update (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"sku\":\"TH-RED-M\",\"size\":\"M\",\"color\":\"Red\",\"priceOverride\":110.00,\"stockQuantity\":8,\"restockLevel\":3}" }, "url": "{{baseUrl}}/api/variants/:id" } },
+        { "name": "Delete (staff, soft)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/variants/:id" } }
+      ]
+    },
+    {
+      "name": "Catalog - Images",
+      "item": [
+        { "name": "List for product", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products/:productId/images" } },
+        { "name": "Add (staff)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"variantId\":null,\"url\":\"https://cdn.example.com/helmet-front.jpg\",\"altText\":\"Front\",\"displayOrder\":1,\"primary\":true}" }, "url": "{{baseUrl}}/api/products/:productId/images" } },
+        { "name": "Update (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"variantId\":null,\"url\":\"https://cdn.example.com/helmet-side.jpg\",\"altText\":\"Side\",\"displayOrder\":2,\"primary\":false}" }, "url": "{{baseUrl}}/api/images/:id" } },
+        { "name": "Delete (staff)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/images/:id" } }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        { "name": "List for product", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products/:productId/reviews" } },
+        { "name": "Summary (avg + count)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products/:productId/reviews/summary" } },
+        { "name": "Create (customer)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"rating\":5,\"text\":\"Excellent, very durable\"}" }, "url": "{{baseUrl}}/api/products/:productId/reviews" } },
+        { "name": "Update own (customer)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"rating\":4,\"text\":\"Still good\"}" }, "url": "{{baseUrl}}/api/reviews/:id" } },
+        { "name": "Delete (owner or staff)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/reviews/:id" } }
+      ]
+    },
+    {
+      "name": "Wishlist",
+      "item": [
+        { "name": "Get my wishlist", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/wishlist" } },
+        { "name": "Add item", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"productVariantId\":1}" }, "url": "{{baseUrl}}/api/wishlist/items" } },
+        { "name": "Remove item", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/wishlist/items/:id" } }
+      ]
+    },
+    {
+      "name": "Coupons (staff)",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/coupons" } },
+        { "name": "Get by id", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/coupons/:id" } },
+        { "name": "Create", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"code\":\"SAVE20\",\"discountType\":\"PERCENTAGE\",\"discountValue\":20,\"minSpend\":50,\"maxUses\":100,\"perUserLimit\":1,\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2026-12-31T23:59:59Z\",\"active\":true}" }, "url": "{{baseUrl}}/api/coupons" } },
+        { "name": "Update", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"code\":\"SAVE20\",\"discountType\":\"PERCENTAGE\",\"discountValue\":25,\"minSpend\":50,\"maxUses\":100,\"perUserLimit\":1,\"validFrom\":\"2026-01-01T00:00:00Z\",\"validUntil\":\"2026-12-31T23:59:59Z\",\"active\":true}" }, "url": "{{baseUrl}}/api/coupons/:id" } },
+        { "name": "Delete (soft)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/coupons/:id" } },
+        { "name": "Validate (any logged-in user)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"code\":\"SAVE20\",\"subtotal\":100.00}" }, "url": "{{baseUrl}}/api/coupons/validate" } }
+      ]
+    },
+    {
+      "name": "Discounts",
+      "item": [
+        { "name": "Applicable for product (public)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/products/:productId/discounts" } },
+        { "name": "Get by id", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/discounts/:id" } },
+        { "name": "Create on product (staff)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"productId\":1,\"categoryId\":null,\"type\":\"FIXED_AMOUNT\",\"value\":15,\"validFrom\":\"2026-01-01T00:00:00Z\",\"validTo\":\"2026-12-31T23:59:59Z\",\"active\":true}" }, "url": "{{baseUrl}}/api/discounts" } },
+        { "name": "Create on category (staff, cascades)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"productId\":null,\"categoryId\":1,\"type\":\"PERCENTAGE\",\"value\":10,\"validFrom\":\"2026-01-01T00:00:00Z\",\"validTo\":\"2026-12-31T23:59:59Z\",\"active\":true}" }, "url": "{{baseUrl}}/api/discounts" } },
+        { "name": "Update (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"productId\":1,\"categoryId\":null,\"type\":\"FIXED_AMOUNT\",\"value\":20,\"validFrom\":\"2026-01-01T00:00:00Z\",\"validTo\":\"2026-12-31T23:59:59Z\",\"active\":true}" }, "url": "{{baseUrl}}/api/discounts/:id" } },
+        { "name": "Delete (staff)", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/discounts/:id" } }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        { "name": "Get my cart (live prices)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/cart" } },
+        { "name": "Add item", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"productVariantId\":1,\"quantity\":2}" }, "url": "{{baseUrl}}/api/cart/items" } },
+        { "name": "Update item quantity", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"quantity\":3}" }, "url": "{{baseUrl}}/api/cart/items/:id" } },
+        { "name": "Remove item", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/cart/items/:id" } },
+        { "name": "Clear cart", "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/cart" } }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        { "name": "Checkout (place order)", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"shippingAddress\":{\"recipientName\":\"Alice\",\"line1\":\"1 Trail Rd\",\"line2\":null,\"city\":\"Boulder\",\"state\":\"CO\",\"postalCode\":\"80301\",\"country\":\"USA\",\"phone\":\"555-0100\"},\"paymentMethod\":\"CARD\",\"couponCode\":null,\"shippingMethod\":\"Standard\"}" }, "url": "{{baseUrl}}/api/orders" } },
+        { "name": "List my orders", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/orders" } },
+        { "name": "Get order by id", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/orders/:id" } },
+        { "name": "Cancel order", "request": { "method": "POST", "header": [], "url": "{{baseUrl}}/api/orders/:id/cancel" } },
+        { "name": "Order status history", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/orders/:id/history" } },
+        { "name": "Admin: list all orders (staff)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/orders/admin?status=PAID" } },
+        { "name": "Admin: update status (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"status\":\"SHIPPED\",\"note\":\"Handed to courier\"}" }, "url": "{{baseUrl}}/api/orders/:id/status" } },
+        { "name": "Admin: update shipping (staff)", "request": { "method": "PUT", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\"shippingMethod\":\"UPS Ground\",\"trackingNumber\":\"1Z999AA10123456784\"}" }, "url": "{{baseUrl}}/api/orders/:id/shipping" } }
+      ]
+    }
+  ]
+}

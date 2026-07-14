@@ -1,0 +1,79 @@
+server:
+  port: ${SERVER_PORT:9082}
+
+spring:
+  application:
+    name: commercial-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}   # 'redis' in docker-compose; caches the catalog read paths
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+      repositories:
+        enabled: false                # cache-only; don't scan JPA repos as Redis repositories
+  servlet:
+    multipart:
+      max-file-size: 8MB       # matches the 8 MB cap enforced in WebpImageStorageService
+      max-request-size: 10MB
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5534/commercial}   # host-mapped commercial-db port for local run
+    username: ${SPRING_DATASOURCE_USERNAME:adventure_commercial}
+    password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate            # Flyway owns the schema; Hibernate only validates
+    open-in-view: false
+    properties:
+      hibernate.format_sql: true
+  flyway:
+    enabled: true
+  kafka:
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: commercial-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:9761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://tempo:4318/v1/traces}
+
+# Validates the RS256 access token with the PUBLIC key only (never signs).
+jwt:
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
+
+# Uploaded product images: converted to WebP and stored here, served at /media/**.
+# In Docker this is a mounted volume so images survive rebuilds; locally it defaults
+# to a project-relative dir.
+app:
+  media:
+    dir: ${APP_MEDIA_DIR:./media/products}
+    webp-quality: ${APP_MEDIA_WEBP_QUALITY:0.82}

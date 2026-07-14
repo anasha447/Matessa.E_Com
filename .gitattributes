@@ -1,0 +1,10 @@
+# Normalize line endings. Shell scripts and the Maven wrapper MUST be LF — the Docker
+# build stages run them under `sh`, and CRLF breaks them (order-service build failure).
+* text=auto
+mvnw text eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows scripts stay CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf

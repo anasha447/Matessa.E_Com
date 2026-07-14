@@ -1,0 +1,57 @@
+server:
+  port: ${SERVER_PORT:9081}
+
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5533/users}   # host-mapped users-db port for local run
+    username: ${SPRING_DATASOURCE_USERNAME:adventure_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate            # Flyway owns the schema; Hibernate only validates
+    open-in-view: false
+    properties:
+      hibernate.format_sql: true
+  flyway:
+    enabled: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:9761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://tempo:4318/v1/traces}
+
+jwt:
+  private-key-path: ${JWT_PRIVATE_KEY_PATH:file:../../keys/jwt-private.pem}   # relative to the module dir for local run
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
+  access-token-ttl-seconds: ${JWT_ACCESS_TTL:900}        # 15 min
+  refresh-token-ttl-seconds: ${JWT_REFRESH_TTL:604800}   # 7 days
+  issuer: matessa-user-service
+
+# Initial admin seeding (first boot only; idempotent). Credentials come from the
+# environment — no default password is shipped. Leave ADMIN_PASSWORD unset to skip.
+app:
+  admin:
+    email: ${ADMIN_EMAIL:admin@matessa.com}
+    password: ${ADMIN_PASSWORD:}
+    seed-enabled: ${ADMIN_SEED_ENABLED:true}
