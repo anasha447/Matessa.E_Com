@@ -12,7 +12,7 @@ import {
 import { api } from "@/lib/api";
 import type { CartResponse } from "@/lib/api";
 
-export const CART_PLACEHOLDER = "/design/helmetVenomFront.png";
+export const CART_PLACEHOLDER = "/brand/leaf-pattern-light.webp";
 const GUEST_KEY = "ad_guest_cart";
 
 /** A guest cart line kept in localStorage. Priced on demand via /api/cart/price so
