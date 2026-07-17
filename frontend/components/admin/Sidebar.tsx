@@ -52,7 +52,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
       <div className="sb-brand">
         <div className="sb-logo" />
         <div className="sb-brand-name">
-          <b>Adventure Dose</b>
+          <b>Matessa</b>
           <small>Admin panel</small>
         </div>
       </div>

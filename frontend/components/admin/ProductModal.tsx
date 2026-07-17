@@ -25,7 +25,7 @@ export function ProductModal({
     slug: initial?.slug ?? "",
     categoryId: (initial?.categoryId ?? categories[0]?.id ?? "").toString(),
     basePrice: initial?.basePrice?.toString() ?? "",
-    brand: initial?.brand ?? "Adventure Dose",
+    brand: initial?.brand ?? "Matessa",
     description: initial?.description ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,7 +46,7 @@ export function ProductModal({
       slug: form.slug.trim(),
       description: form.description.trim() || null,
       basePrice: Number(form.basePrice),
-      brand: form.brand.trim() || "Adventure Dose",
+      brand: form.brand.trim() || "Matessa",
     };
     setBusy(true);
     try {

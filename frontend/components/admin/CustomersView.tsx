@@ -58,7 +58,7 @@ export function CustomersView({
                 segments={[
                   { label: "Customers", value: analytics.usersByRole.CUSTOMER ?? 0, color: "#33414F" },
                   { label: "Managers", value: analytics.usersByRole.MANAGER ?? 0, color: "#2E9CC4" },
-                  { label: "Admins", value: analytics.usersByRole.ADMIN ?? 0, color: "#FF6B1A" },
+                  { label: "Admins", value: analytics.usersByRole.ADMIN ?? 0, color: "#F26323" },
                 ]}
               />
             </div>

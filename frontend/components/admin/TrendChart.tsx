@@ -54,8 +54,8 @@ export function TrendChart({ data, height = 220 }: { data: RevenueTrendPoint[]; 
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }} role="img" aria-label="Revenue trend, last 12 months">
         <defs>
           <linearGradient id="adTrendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#FF6B1A" stopOpacity=".28" />
-            <stop offset="100%" stopColor="#FF6B1A" stopOpacity="0" />
+            <stop offset="0%" stopColor="#F26323" stopOpacity=".28" />
+            <stop offset="100%" stopColor="#F26323" stopOpacity="0" />
           </linearGradient>
         </defs>
         {Array.from({ length: gridLines + 1 }, (_, i) => {
@@ -76,11 +76,11 @@ export function TrendChart({ data, height = 220 }: { data: RevenueTrendPoint[]; 
           </text>
         ))}
         <path d={area} fill="url(#adTrendFill)" />
-        <path d={line} fill="none" stroke="#FF6B1A" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line} fill="none" stroke="#F26323" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
         {tip && (
           <g>
             <line x1={pts[tip.i][0]} x2={pts[tip.i][0]} y1={padT} y2={H - padB} stroke="currentColor" opacity=".2" strokeDasharray="3 3" />
-            <circle cx={pts[tip.i][0]} cy={pts[tip.i][1]} r="4.5" fill="#FF6B1A" stroke="#fff" strokeWidth="2" />
+            <circle cx={pts[tip.i][0]} cy={pts[tip.i][1]} r="4.5" fill="#F26323" stroke="#fff" strokeWidth="2" />
           </g>
         )}
       </svg>
