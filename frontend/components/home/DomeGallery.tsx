@@ -1,12 +1,12 @@
 "use client";
 
-// "Who Drinks Mate?" (design: Matessa Landing v4 §8) — faithful 3D dome gallery.
-// 35 columns × 5 rows of grayscale tiles on the inside of a rotating sphere
-// (CSS perspective + preserve-3d). Pointer-drag spins it with inertia; tapping a
-// tile opens a full-image overlay. Client-only mount (no SSR markup mismatch).
+// "Who Drinks Mate?" — faithful port of Matessa Landing v4 §Who Drinks Mate.
+// Staggered-column photo sphere (35 segments, 5 rows offset per column) viewed from
+// inside; pointer-drag rotates with smoothing (rot += (target-rot)*0.08) and release
+// inertia; tap (not drag) opens the grayscale overlay. Radius is responsive via
+// ResizeObserver. Vertical flick on touch scrolls the page like the design.
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 
 const IMAGES = [
   "/brand/gal-messi2.webp",
@@ -22,165 +22,215 @@ const IMAGES = [
   "/brand/gal-review3.webp",
 ];
 
-const COLS = 35;
-const ROWS = 5;
-const RADIUS = 900; // px — sphere radius
-const TILE_W = 150;
-const TILE_H = 100;
+const SEG = 35;
+const UNIT = 360 / SEG / 2;
+const EVEN_YS = [-4, -2, 0, 2, 4];
+const ODD_YS = [-3, -1, 1, 3, 5];
+
+const clampN = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 
 export function DomeGallery() {
   const [mounted, setMounted] = useState(false);
   const [zoom, setZoom] = useState<string | null>(null);
-  const stage = useRef<HTMLDivElement>(null);
-  const rot = useRef({ x: -8, y: 0 });
-  const vel = useRef(0);
-  const drag = useRef<{ x: number; y: number } | null>(null);
-  const raf = useRef(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sphereRef = useRef<HTMLDivElement>(null);
+  const moved = useRef(false);
 
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!mounted) return;
-    const el = stage.current;
-    if (!el) return;
+    const root = rootRef.current;
+    const sphere = sphereRef.current;
+    if (!root || !sphere) return;
 
+    // Responsive radius, exactly like the design.
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0].contentRect;
+      const w = Math.max(1, cr.width);
+      const h = Math.max(1, cr.height);
+      const basis = w / h >= 1.3 ? w : Math.min(w, h);
+      let radius = Math.min(basis * 0.5, h * 1.35);
+      radius = Math.max(w < 768 ? 620 : 900, Math.min(radius, 1400));
+      root.style.setProperty("--radius", `${Math.round(radius)}px`);
+    });
+    ro.observe(root);
+
+    const rot = { x: 0, y: 0 };
+    const target = { x: 0, y: 0 };
     const apply = () => {
-      el.style.transform = `translateZ(0) rotateX(${rot.current.x}deg) rotateY(${rot.current.y}deg)`;
+      sphere.style.transform = `translateZ(calc(var(--radius) * -1)) rotateX(${rot.x}deg) rotateY(${rot.y}deg)`;
     };
     apply();
-
+    let raf = 0;
     const loop = () => {
-      // inertia decay after release
-      if (!drag.current && Math.abs(vel.current) > 0.02) {
-        rot.current.y += vel.current;
-        vel.current *= 0.94;
-        apply();
-      }
-      raf.current = requestAnimationFrame(loop);
+      rot.x += (target.x - rot.x) * 0.08;
+      rot.y += (target.y - rot.y) * 0.08;
+      apply();
+      raf = requestAnimationFrame(loop);
     };
-    raf.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf.current);
+    raf = requestAnimationFrame(loop);
+
+    const stage = root.querySelector<HTMLElement>(".mtsa-stage");
+    if (!stage) return;
+    const isTouch = window.matchMedia("(pointer: coarse)").matches;
+    if (isTouch) stage.style.touchAction = "none";
+
+    let start: { x: number; y: number } | null = null;
+    let startRot: { x: number; y: number } | null = null;
+    let lastX = 0, lastY = 0, lastT = 0, vx = 0, vy = 0;
+
+    const down = (e: PointerEvent) => {
+      start = { x: e.clientX, y: e.clientY };
+      startRot = { x: target.x, y: target.y };
+      lastX = e.clientX; lastY = e.clientY; lastT = performance.now(); vx = 0; vy = 0;
+      try {
+        stage.setPointerCapture(e.pointerId);
+      } catch {
+        // pointer capture is best-effort
+      }
+    };
+    const move = (e: PointerEvent) => {
+      if (!start || !startRot) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (!moved.current && dx * dx + dy * dy > 36) moved.current = true;
+      if (!moved.current) return;
+      target.x = clampN(startRot.x - dy / 26, -15, 15);
+      target.y = startRot.y + dx / 26;
+      const now = performance.now();
+      if (now - lastT > 0) {
+        vx = (e.clientX - lastX) / (now - lastT);
+        vy = (e.clientY - lastY) / (now - lastT);
+      }
+      lastX = e.clientX; lastY = e.clientY; lastT = now;
+    };
+    const end = () => {
+      if (!start) return;
+      start = null;
+      if (moved.current) {
+        if (isTouch && Math.abs(vy) > 0.9 && Math.abs(vy) > Math.abs(vx) * 1.3) {
+          if (vy < 0) {
+            const f = document.getElementById("footer");
+            if (f) window.scrollBy({ top: f.getBoundingClientRect().top, behavior: "smooth" });
+          } else {
+            window.scrollBy({ top: -window.innerHeight * 0.9, behavior: "smooth" });
+          }
+        } else {
+          target.y += clampN(vx, -1.2, 1.2) * 110;
+          target.x = clampN(target.x - clampN(vy, -0.8, 0.8) * 8, -15, 15);
+        }
+        setTimeout(() => {
+          moved.current = false;
+        }, 120);
+      }
+    };
+    stage.addEventListener("pointerdown", down);
+    stage.addEventListener("pointermove", move);
+    stage.addEventListener("pointerup", end);
+    stage.addEventListener("pointercancel", end);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      stage.removeEventListener("pointerdown", down);
+      stage.removeEventListener("pointermove", move);
+      stage.removeEventListener("pointerup", end);
+      stage.removeEventListener("pointercancel", end);
+    };
   }, [mounted]);
 
-  const onDown = (e: React.PointerEvent) => {
-    drag.current = { x: e.clientX, y: e.clientY };
-    vel.current = 0;
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    const dx = e.clientX - drag.current.x;
-    const dy = e.clientY - drag.current.y;
-    drag.current = { x: e.clientX, y: e.clientY };
-    rot.current.y += dx * 0.25;
-    rot.current.x = Math.max(-28, Math.min(10, rot.current.x - dy * 0.12));
-    vel.current = dx * 0.25;
-    stage.current!.style.transform = `translateZ(0) rotateX(${rot.current.x}deg) rotateY(${rot.current.y}deg)`;
-  };
-  const onUp = () => {
-    drag.current = null;
-  };
+  // Tiles: columns x = -37 + c*2, rows staggered per column parity.
+  const tiles: { yaw: number; pitch: number; src: string }[] = [];
+  let k = 0;
+  for (let c = 0; c < SEG; c++) {
+    const x = -37 + c * 2;
+    const ys = c % 2 === 0 ? EVEN_YS : ODD_YS;
+    for (const y of ys) {
+      tiles.push({ yaw: UNIT * (x + 0.5), pitch: UNIT * (y - 0.5), src: IMAGES[k % IMAGES.length] });
+      k++;
+    }
+  }
 
   return (
-    <section id="gallery" className="relative overflow-hidden py-16 nav:py-24">
-      {/* grayscale backdrop */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 opacity-20 grayscale"
-        style={{ backgroundImage: "url('/brand/bgdemo.webp')", backgroundSize: "cover", backgroundPosition: "center" }}
-      />
-      <div className="absolute inset-0 bg-white/70" aria-hidden="true" />
-
-      <div className="relative">
-        <h2 className="mb-3 text-center font-heading text-3xl font-bold text-darkgreen md:text-4xl">
-          Who Drinks Mate?
-        </h2>
-        <p className="mb-8 text-center font-body text-xs font-bold uppercase tracking-[0.24em] text-gray-500">
-          Drag to Explore · Tap a Photo
-        </p>
-
-        {mounted && (
+    <section id="gallery" style={{ background: "#F9F7F3" }}>
+      <h2
+        className="font-heading"
+        style={{
+          margin: 0,
+          padding: "clamp(48px, 6vw, 84px) 20px clamp(26px, 4vw, 44px)",
+          fontWeight: 700,
+          fontSize: "clamp(32px, 3.8vw, 50px)",
+          letterSpacing: "-0.01em",
+          color: "#2F3B28",
+          textAlign: "center",
+        }}
+      >
+        Who Drinks Mate?
+      </h2>
+      <div style={{ position: "relative", overflow: "hidden", background: "#4A4133" }}>
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage: "url('/brand/bgdemo.webp')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            filter: "grayscale(1) brightness(0.92)",
+          }}
+        />
+        <div
+          ref={rootRef}
+          className={`mtsa-dome${zoom ? " mtsa-dome-open" : ""}`}
+          style={{ position: "relative", height: "clamp(500px, 88svh, 860px)" }}
+        >
           <div
-            className="mx-auto h-[420px] max-w-[1100px] cursor-grab touch-pan-y select-none active:cursor-grabbing nav:h-[520px]"
-            style={{ perspective: 1200 }}
-            onPointerDown={onDown}
-            onPointerMove={onMove}
-            onPointerUp={onUp}
-            onPointerLeave={onUp}
-            role="group"
-            aria-label="Draggable photo dome of mate drinkers"
+            style={{
+              position: "absolute",
+              bottom: "calc(9vw + 14px)",
+              left: 0,
+              right: 0,
+              zIndex: 10,
+              fontFamily: "var(--font-body)",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "rgba(249,247,243,0.75)",
+              textAlign: "center",
+              pointerEvents: "none",
+            }}
           >
-            <div
-              ref={stage}
-              className="relative left-1/2 top-1/2 h-0 w-0"
-              style={{ transformStyle: "preserve-3d" }}
-            >
-              {Array.from({ length: COLS }).map((_, c) =>
-                Array.from({ length: ROWS }).map((__, r) => {
-                  const src = IMAGES[(c * ROWS + r) % IMAGES.length];
-                  const yaw = (360 / COLS) * c;
-                  const pitch = (r - (ROWS - 1) / 2) * 13;
-                  return (
-                    <button
-                      key={`${c}-${r}`}
-                      type="button"
-                      tabIndex={-1}
-                      aria-label="View photo"
+            Drag to Explore · Tap a Photo
+          </div>
+          <div className="mtsa-stage" role="group" aria-label="Draggable photo dome of mate drinkers">
+            <div className="mtsa-sphere" ref={sphereRef}>
+              {mounted &&
+                tiles.map((t, i) => (
+                  <div
+                    key={i}
+                    className="mtsa-sphere-item"
+                    style={{ transform: `rotateY(${t.yaw}deg) rotateX(${t.pitch}deg) translateZ(var(--radius))` }}
+                  >
+                    <div
+                      className="mtsa-tile"
                       onClick={() => {
-                        if (Math.abs(vel.current) < 1) setZoom(src);
-                      }}
-                      className="absolute overflow-hidden rounded-lg border border-white/40"
-                      style={{
-                        width: TILE_W,
-                        height: TILE_H,
-                        transform: `rotateY(${yaw}deg) rotateX(${pitch}deg) translateZ(${-RADIUS}px)`,
-                        backfaceVisibility: "hidden",
+                        if (!moved.current) setZoom(t.src);
                       }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={src}
-                        alt=""
-                        loading="lazy"
-                        draggable={false}
-                        className="h-full w-full object-cover grayscale transition-all duration-300 hover:grayscale-0"
-                      />
-                    </button>
-                  );
-                }),
-              )}
+                      <img src={t.src} alt="Mate drinker" draggable={false} loading="lazy" />
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
-        )}
-      </div>
-
-      {/* zoom overlay */}
-      {zoom && (
-        <div
-          className="fixed inset-0 z-[100] grid place-items-center p-6"
-          style={{ background: "rgba(15,20,10,0.55)", backdropFilter: "blur(4px)" }}
-          onClick={() => setZoom(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Photo"
-        >
-          <Image
-            src={zoom}
-            alt="Mate drinker"
-            width={720}
-            height={720}
-            className="max-h-[80svh] w-auto rounded-2xl shadow-2xl"
-          />
-          <button
-            type="button"
-            className="absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-white/90 font-bold text-darkgreen"
-            aria-label="Close photo"
-            onClick={() => setZoom(null)}
-          >
-            ✕
-          </button>
+          <div className="mtsa-dome-overlay" onClick={() => setZoom(null)} role="dialog" aria-label="Photo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {zoom && <img src={zoom} alt="Mate drinker enlarged" />}
+          </div>
         </div>
-      )}
+      </div>
     </section>
   );
 }

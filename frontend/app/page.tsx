@@ -27,6 +27,13 @@ async function getBlends(): Promise<BlendCardData[]> {
     const mate = cats.find((c) => c.name.toLowerCase() === "mate") ?? cats[0];
     if (!mate) return [];
     const page = await api.products.list({ categoryId: mate.id, size: 6 });
+    // Design order: Masala → Lemon & Ginger → Raw; anything else follows.
+    const order = ["masala-mate", "lemon-ginger-mate", "raw-mate"];
+    page.content.sort((a, b) => {
+      const ai = order.indexOf(a.slug);
+      const bi = order.indexOf(b.slug);
+      return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi);
+    });
     return await Promise.all(
       page.content.map(async (p): Promise<BlendCardData> => {
         let variantId: number | null = null;
@@ -68,7 +75,7 @@ export default async function HomePage() {
         <EnergyComparison />
         <DomeGallery />
       </main>
-      <SiteFooter variant="full" />
+      <SiteFooter variant="full" overlap />
     </>
   );
 }

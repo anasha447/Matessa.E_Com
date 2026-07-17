@@ -36,7 +36,7 @@ export interface ProductDetail {
   reviewCount: number;
 }
 
-const FALLBACK_IMAGE = "/design/helmetVenomFront.png";
+const FALLBACK_IMAGE = "/brand/leaf-pattern-light.webp";
 
 export async function getProductDetail(id: number): Promise<ProductDetail | null> {
   try {

@@ -1,22 +1,27 @@
-// "Better Than Tea. Smarter Than Coffee." (design: Matessa Landing v4 §7).
-// Hand-authored SVG line chart (curves lifted from the design) + three comparison
-// cards; Yerba Mate is the highlighted winner. Pure server component — no JS.
+// "Better Than Tea. Smarter Than Coffee." — faithful port of Matessa Landing v4
+// §Energy Comparison. Row-reverse layout (chart card right on desktop), the design's
+// exact chart geometry (axes #D8CCB8, dashed coffee/tea curves with white data dots,
+// solid mate line, floating legend card), and the three comparison cards with colored
+// dots + uppercase Asul titles; Yerba Mate is the highlighted winner. No JS.
 
 import { Reveal } from "@/components/Reveal";
 
 const CARDS = [
   {
     name: "Coffee",
+    dot: "#EF4444",
     copy: "Quick spike followed by an energy crash within 2–3 hours. Often accompanied by jitters and anxiety.",
     highlight: false,
   },
   {
     name: "Tea",
+    dot: "#F3CB57",
     copy: "Gentler lift but lower energy levels. May not provide enough sustained focus for demanding tasks.",
     highlight: false,
   },
   {
     name: "Yerba Mate",
+    dot: "#3E5F2D",
     copy: "Smooth, steady energy for 4–6 hours. Sharp focus with no crash and no jitters.",
     highlight: true,
   },
@@ -24,60 +29,149 @@ const CARDS = [
 
 export function EnergyComparison() {
   return (
-    <section id="energy" aria-label="Energy Comparison" className="py-16 nav:py-24">
-      <div className="mx-auto max-w-[1100px] px-6">
+    <section id="energy" aria-label="Energy Comparison" style={{ background: "#F9F7F3", padding: "clamp(60px, 8vw, 110px) clamp(20px, 4vw, 48px)" }}>
+      <div style={{ maxWidth: 1160, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(36px, 4.5vw, 52px)" }}>
         <Reveal>
-          <h2 className="mb-12 text-center font-heading text-3xl font-bold text-darkgreen md:text-4xl">
+          <h2
+            className="font-heading"
+            style={{ margin: 0, fontWeight: 700, fontSize: "clamp(30px, 3.4vw, 40px)", lineHeight: 1.25, color: "#2F3B28", textAlign: "center", textWrap: "balance" }}
+          >
             Better Than Tea.
             <br />
             Smarter Than Coffee.
           </h2>
         </Reveal>
 
-        <div className="flex flex-col-reverse items-center gap-8 nav:flex-row-reverse nav:items-stretch nav:gap-12">
+        <div style={{ display: "flex", flexDirection: "row-reverse", flexWrap: "wrap", gap: "clamp(24px, 3.5vw, 56px)", alignItems: "center" }}>
           {/* Chart card */}
-          <Reveal className="w-full nav:w-1/2">
-            <figure className="h-full rounded-[2rem] bg-[#FCF0E3] p-6 nav:p-8">
-              <figcaption className="mb-4 text-center font-heading text-lg font-bold text-darkgreen">
+          <Reveal className="min-w-[300px] flex-[1_1_440px]">
+            <div
+              style={{
+                background: "#FCF0E3",
+                border: "1px solid rgba(242,99,35,0.12)",
+                borderRadius: "2rem",
+                padding: "clamp(22px, 2.6vw, 36px)",
+                boxShadow: "inset 0 2px 8px rgba(24,32,16,0.05)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 20,
+              }}
+            >
+              <h3
+                className="font-heading"
+                style={{ margin: 0, textAlign: "center", fontWeight: 700, fontSize: 18, letterSpacing: "0.08em", textTransform: "uppercase", color: "#2F3B28" }}
+              >
                 Energy Over Time
-              </figcaption>
-              <svg viewBox="0 0 400 300" role="img" aria-label="Line chart: coffee spikes then crashes, tea stays low, mate holds a steady plateau" className="w-full">
-                {/* axes */}
-                <line x1="20" y1="280" x2="390" y2="280" stroke="#2F3B28" strokeWidth="1.5" opacity="0.35" />
-                <line x1="20" y1="280" x2="20" y2="20" stroke="#2F3B28" strokeWidth="1.5" opacity="0.35" />
-                {/* curves (from the design) */}
-                <path d="M 20 280 C 50 150, 100 50, 120 80 C 140 110, 180 250, 320 275" fill="none" stroke="#EF4444" strokeWidth="3" strokeDasharray="7 6" strokeLinecap="round" />
-                <path d="M 20 280 C 60 220, 120 150, 160 150 C 200 150, 280 200, 350 230" fill="none" stroke="#F3CB57" strokeWidth="3" strokeDasharray="7 6" strokeLinecap="round" />
-                <path d="M 20 280 C 50 200, 80 100, 140 100 L 260 100 C 300 100, 340 120, 380 150" fill="none" stroke="#3E5F2D" strokeWidth="3.5" strokeLinecap="round" />
-                {/* axis labels */}
-                <text x="8" y="150" transform="rotate(-90 8 150)" textAnchor="middle" fontSize="12" fill="#4A5545" fontFamily="var(--font-body)">
+              </h3>
+              <div style={{ position: "relative", padding: "30px 8px 26px 30px" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: -18,
+                    top: "55%",
+                    transform: "translateY(-50%) rotate(-90deg)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "rgba(47,59,40,0.45)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   Energy Level
-                </text>
-                <text x="205" y="298" textAnchor="middle" fontSize="12" fill="#4A5545" fontFamily="var(--font-body)">
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: "55%",
+                    transform: "translateX(-50%)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "rgba(47,59,40,0.45)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   Time (Hours)
-                </text>
-              </svg>
-              <div className="mt-4 flex items-center justify-center gap-5 font-body text-sm text-gray-600">
-                <span className="flex items-center gap-2"><i className="h-1 w-6 rounded bg-[#EF4444]" /> Coffee</span>
-                <span className="flex items-center gap-2"><i className="h-1 w-6 rounded bg-yellow" /> Tea</span>
-                <span className="flex items-center gap-2"><i className="h-1 w-6 rounded bg-green" /> Mate</span>
+                </div>
+                {/* legend */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 8,
+                    zIndex: 2,
+                    background: "rgba(255,255,255,0.85)",
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(62,95,45,0.14)",
+                    boxShadow: "0 1px 4px rgba(24,32,16,0.08)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 5,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#2F3B28",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#3E5F2D", border: "1px solid #FFFFFF", boxShadow: "0 0 0 1px rgba(62,95,45,0.3)", flex: "none" }} />
+                    <span>Mate</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#FFFFFF", border: "2px solid #EF4444", flex: "none" }} />
+                    <span>Coffee</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#FFFFFF", border: "2px solid #F3CB57", flex: "none" }} />
+                    <span>Tea</span>
+                  </div>
+                </div>
+                <svg viewBox="0 0 400 300" role="img" aria-label="Line chart: coffee spikes then crashes, tea stays low, mate holds a steady plateau" style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}>
+                  <line x1="20" y1="280" x2="380" y2="280" stroke="#D8CCB8" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="20" y1="280" x2="20" y2="20" stroke="#D8CCB8" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M 20 280 C 50 150, 100 50, 120 80 C 140 110, 180 250, 320 275" fill="none" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" strokeDasharray="5,5" />
+                  <circle cx="20" cy="280" r="5" fill="white" stroke="#EF4444" strokeWidth="2.5" />
+                  <circle cx="120" cy="80" r="5" fill="white" stroke="#EF4444" strokeWidth="2.5" />
+                  <path d="M 20 280 C 60 220, 120 150, 160 150 C 200 150, 280 200, 350 230" fill="none" stroke="#F3CB57" strokeWidth="3" strokeLinecap="round" strokeDasharray="8" />
+                  <circle cx="20" cy="280" r="5" fill="white" stroke="#F3CB57" strokeWidth="2.5" />
+                  <circle cx="160" cy="150" r="5" fill="white" stroke="#F3CB57" strokeWidth="2.5" />
+                  <path d="M 20 280 C 50 200, 80 100, 140 100 L 260 100 C 300 100, 340 120, 380 150" fill="none" stroke="#3E5F2D" strokeWidth="3.5" strokeLinecap="round" />
+                  <circle cx="20" cy="280" r="6" fill="#3E5F2D" stroke="white" strokeWidth="3" />
+                  <circle cx="140" cy="100" r="6" fill="#3E5F2D" stroke="white" strokeWidth="3" />
+                </svg>
               </div>
-            </figure>
+            </div>
           </Reveal>
 
           {/* Comparison cards */}
-          <div className="flex w-full flex-col gap-4 nav:w-1/2">
+          <div className="flex min-w-[300px] flex-[1_1_400px] flex-col" style={{ gap: 16 }}>
             {CARDS.map((c, i) => (
               <Reveal key={c.name} delay={i * 110}>
                 <div
-                  className={`rounded-[18px] border-2 p-5 ${
-                    c.highlight ? "border-green bg-[#E8F3E8]" : "border-gray-200 bg-white"
-                  }`}
+                  style={{
+                    padding: "22px 24px",
+                    borderRadius: 18,
+                    background: c.highlight ? "#E8F3E8" : "#FFFFFF",
+                    border: c.highlight ? "2px solid #3E5F2D" : "2px solid transparent",
+                    boxShadow: c.highlight ? "0 10px 24px rgba(62,95,45,0.16)" : "0 1px 2px rgba(0,0,0,0.04)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
                 >
-                  <h3 className={`mb-1.5 font-heading text-lg font-bold ${c.highlight ? "text-green" : "text-darkgreen"}`}>
-                    {c.name}
-                  </h3>
-                  <p className="text-[15px] text-gray-600">{c.copy}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: "50%", background: c.dot, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.08)", flex: "none" }} />
+                    <h3
+                      className="font-heading"
+                      style={{ margin: 0, fontWeight: 700, fontSize: 19, letterSpacing: "0.06em", textTransform: "uppercase", color: c.highlight ? "#2F3B28" : "#1F2937" }}
+                    >
+                      {c.name}
+                    </h3>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.6, color: c.highlight ? "#3E4A38" : "#4B5563" }}>{c.copy}</p>
                 </div>
               </Reveal>
             ))}

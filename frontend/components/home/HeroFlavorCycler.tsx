@@ -1,71 +1,92 @@
 "use client";
 
-// Landing hero (design: Matessa Landing v4 §Hero). Three flavors cross-fade on a
-// color-field circle: pouches rotate in/out, ingredient art rises in, the H1's
-// accent word tints per flavor. Auto-advances every 4s (+1.4s grace on load),
-// pauses on hover/touch/hidden tab; horizontal swipe switches on touch.
+// Landing hero — faithful port of design-source/project/Matessa Landing v4.dc.html §Hero.
+// Only the H1 is visible in the copy column (the design hides eyebrow/subcopy/tabs).
+// Right stage: offset color-field circle, ground shadow, per-flavor floating
+// ingredients (exact positions/rotations/duration offsets), and a bottom-anchored
+// pouch stack that swings in/out (origin 50% 230%). Autoplay 4s (+1.4s first),
+// pauses on hover/touch/hidden tab; horizontal swipe switches flavors.
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 
 interface Flavor {
-  name: string;
   deepText: string;
   circle: string;
   pouch: string;
-  /** [behind, front] floating ingredient art */
-  ingredients: [string, string];
+  pouchAlt: string;
 }
 
 const FLAVORS: Flavor[] = [
   {
-    name: "Masala Mate",
     deepText: "#C2500F",
     circle: "radial-gradient(circle at 32% 26%, #F8DCC2 0%, #F2BF92 100%)",
     pouch: "/brand/pouch-masala.webp",
-    ingredients: ["/brand/ing-cinnamon-anise.webp", "/brand/ing-cardamom.png"],
+    pouchAlt: "Matessa Masala yerba mate pouch",
   },
   {
-    name: "Lemon & Ginger Mate",
     deepText: "#A58114",
     circle: "radial-gradient(circle at 32% 26%, #FAEBBB 0%, #F4D87D 100%)",
     pouch: "/brand/pouch-lemon-ginger.webp",
-    ingredients: ["/brand/ing-ginger1.png", "/brand/ing-lemon1.png"],
+    pouchAlt: "Matessa Lemon and Ginger yerba mate pouch",
   },
   {
-    name: "Raw Mate",
     deepText: "#8F7A33",
     circle: "radial-gradient(circle at 32% 26%, #F1E9D0 0%, #E4D5A8 100%)",
     pouch: "/brand/pouch-raw.webp",
-    ingredients: ["/brand/ing-mate-leaf1.webp", "/brand/ing-mate-leaf2.webp"],
+    pouchAlt: "Matessa Raw Mate pure loose leaf pouch",
   },
 ];
 
+// Behind-the-pouch ingredients (one per flavor), exact geometry from the design.
+const ING_BEHIND = [
+  { src: "/brand/ing-cinnamon-anise.webp", alt: "Cinnamon sticks and star anise", left: "5%", bottom: "10%", width: "clamp(110px, 12vw, 170px)", rotate: "-8deg", anim: "mtsa-float 6.4s ease-in-out -1.2s infinite" },
+  { src: "/brand/ing-ginger1.png", alt: "Ginger root", left: "5%", bottom: "8%", width: "clamp(96px, 11vw, 152px)", rotate: "-6deg", anim: "mtsa-float 7.2s ease-in-out -2.4s infinite" },
+  { src: "/brand/ing-mate-leaf1.webp", alt: "Yerba mate leaves", left: "7%", bottom: "6%", width: "clamp(96px, 11vw, 150px)", rotate: "-10deg", anim: "mtsa-float 6.8s ease-in-out -1.6s infinite" },
+];
+
+// In-front ingredients (one per flavor).
+const ING_FRONT = [
+  { src: "/brand/ing-cardamom.png", alt: "Cardamom pods", right: "15%", bottom: "14%", width: "clamp(56px, 6.5vw, 90px)", rotate: "20deg", anim: "mtsa-float 5.9s ease-in-out -1.8s infinite" },
+  { src: "/brand/ing-lemon1.png", alt: "Lemon", right: "7%", bottom: "14%", width: "clamp(76px, 9vw, 126px)", rotate: "8deg", anim: "mtsa-float 5.6s ease-in-out infinite" },
+  { src: "/brand/ing-mate-leaf2.webp", alt: "Yerba mate leaf branch", right: "9%", bottom: "5%", width: "clamp(88px, 10vw, 140px)", rotate: "12deg", anim: "mtsa-float 5.4s ease-in-out infinite" },
+];
+
 const INTERVAL_S = 4;
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 840px)");
+    const on = () => setMobile(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return mobile;
+}
 
 export function HeroFlavorCycler() {
   const [active, setActive] = useState(0);
   const [prev, setPrev] = useState(-1);
   const [entered, setEntered] = useState(false);
+  const isMobile = useIsMobile();
   const hover = useRef(false);
   const touch = useRef<{ x: number; y: number } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setEntered(true), 60);
-    return () => clearTimeout(t);
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Autoplay: re-armed after every change; skips while hovered or tab hidden.
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const arm = (first: boolean) => {
       timer.current = setTimeout(() => {
         if (!document.hidden && !hover.current) {
           setActive((a) => {
             setPrev(a);
-            return (a + 1) % FLAVORS.length;
+            return (a + 1) % 3;
           });
         }
         arm(false);
@@ -85,8 +106,18 @@ export function HeroFlavorCycler() {
     });
 
   const pouchStyle = (i: number): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center",
+      transformOrigin: "50% 230%",
+      willChange: "transform, opacity",
+    };
     if (i === active) {
       return {
+        ...base,
         transform: entered ? "rotate(0deg)" : "rotate(-58deg)",
         opacity: entered ? 1 : 0,
         transition: "transform 1.25s cubic-bezier(0.22, 0.68, 0.14, 1), opacity 0.5s ease 0.12s",
@@ -95,20 +126,21 @@ export function HeroFlavorCycler() {
     }
     if (i === prev) {
       return {
+        ...base,
         transform: "rotate(58deg)",
         opacity: 0,
         transition: "transform 1.15s cubic-bezier(0.5, 0.04, 0.62, 1), opacity 0.55s ease 0.32s",
         zIndex: 2,
       };
     }
-    return { transform: "rotate(-58deg)", opacity: 0, transition: "none", zIndex: 1 };
+    return { ...base, transform: "rotate(-58deg)", opacity: 0, transition: "none", zIndex: 1 };
   };
 
   const ingStyle = (flavor: number, delay: number): React.CSSProperties => {
     const on = active === flavor && entered;
     return {
       opacity: on ? 1 : 0,
-      transform: on ? "translateY(0) scale(1)" : "translateY(46px) scale(0.72)",
+      transform: on ? "translateY(0px) scale(1)" : "translateY(46px) scale(0.72)",
       transition: on
         ? `opacity 0.7s ease ${delay}s, transform 1.05s cubic-bezier(0.22, 0.68, 0.2, 1) ${delay}s`
         : "opacity 0.4s ease, transform 0.5s ease",
@@ -119,117 +151,171 @@ export function HeroFlavorCycler() {
     <section
       id="top"
       aria-label="Hero"
-      className="relative overflow-hidden pt-20 nav:pt-28"
-      style={{ minHeight: "max(560px, 88svh)" }}
-      onMouseEnter={() => (hover.current = true)}
-      onMouseLeave={() => (hover.current = false)}
-      onTouchStart={(e) => {
-        hover.current = true;
-        touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      }}
-      onTouchEnd={(e) => {
-        hover.current = false;
-        if (!touch.current) return;
-        const dx = e.changedTouches[0].clientX - touch.current.x;
-        const dy = e.changedTouches[0].clientY - touch.current.y;
-        touch.current = null;
-        if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-          go(dx < 0 ? (active + 1) % FLAVORS.length : (active + 2) % FLAVORS.length);
-        }
+      style={{
+        position: "relative",
+        minHeight: isMobile ? "auto" : "max(640px, 96svh)",
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "clamp(12px, 3vw, 40px)",
+        maxWidth: 1360,
+        margin: "0 auto",
+        padding: "clamp(96px, 14vh, 140px) clamp(20px, 4vw, 48px) clamp(36px, 6vh, 70px)",
       }}
     >
-      <div className="mx-auto flex max-w-[1360px] flex-col items-center px-6 nav:flex-row nav:items-center">
-        {/* Headline */}
-        <div className="relative z-10 pt-6 text-center nav:w-[46%] nav:pt-0 nav:text-left">
-          <h1 className="font-heading font-bold text-darkgreen [font-size:clamp(42px,5.2vw,74px)] leading-[1.06] tracking-[-0.01em] text-balance">
-            The Ritual of{" "}
-            <em
-              className="italic"
-              style={{ color: FLAVORS[active].deepText, transition: "color 0.9s ease" }}
-            >
-              Natural Energy
-            </em>
-          </h1>
-          {/* Flavor dots (mobile affordance for the swipe) */}
-          <div className="mt-8 flex items-center justify-center gap-2 nav:justify-start" role="tablist" aria-label="Flavors">
-            {FLAVORS.map((f, i) => (
-              <button
-                key={f.name}
-                role="tab"
-                aria-selected={i === active}
-                aria-label={f.name}
-                onClick={() => go(i)}
-                className="h-2.5 rounded-full transition-all duration-300"
-                style={{
-                  width: i === active ? 26 : 10,
-                  background: i === active ? "#2F3B28" : "rgba(47,59,40,0.3)",
-                }}
-              />
-            ))}
-          </div>
-        </div>
+      {/* Left: copy (design shows only the H1) */}
+      <div style={{ flex: "1 1 430px", minWidth: 300, position: "relative", zIndex: 5 }}>
+        <h1
+          className="font-heading"
+          style={{
+            margin: 0,
+            fontWeight: 700,
+            fontSize: "clamp(42px, 5.2vw, 74px)",
+            lineHeight: 1.06,
+            letterSpacing: "-0.01em",
+            color: "#2F3B28",
+            textWrap: "balance",
+          }}
+        >
+          The Ritual of{" "}
+          <em style={{ fontStyle: "italic", color: FLAVORS[active].deepText, transition: "color 0.9s ease" }}>
+            Natural Energy
+          </em>
+        </h1>
+      </div>
 
-        {/* Pouch stage */}
-        <div className="relative w-full nav:w-[54%]" style={{ minHeight: "clamp(430px, 52vw, 640px)" }}>
-          {/* Color-field circle */}
+      {/* Right: animated pouch stage */}
+      <div
+        onMouseEnter={() => (hover.current = true)}
+        onMouseLeave={() => (hover.current = false)}
+        onTouchStart={(e) => {
+          touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }}
+        onTouchEnd={(e) => {
+          if (!touch.current) return;
+          const dx = e.changedTouches[0].clientX - touch.current.x;
+          const dy = e.changedTouches[0].clientY - touch.current.y;
+          touch.current = null;
+          if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+            go(dx < 0 ? (active + 1) % 3 : (active + 2) % 3);
+          }
+        }}
+        style={{
+          flex: "1 1 460px",
+          minWidth: 280,
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: isMobile ? 430 : "clamp(440px, 52vw, 660px)",
+        }}
+      >
+        {/* color field circle */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: isMobile ? "50%" : 476,
+            top: isMobile ? "100%" : 322,
+            transform: "translate(-50%, -50%)",
+            width: isMobile ? "min(160vw, 650px)" : "clamp(680px, 74vw, 1240px)",
+            aspectRatio: "1",
+            borderRadius: "50%",
+            background: FLAVORS[active].circle,
+            transition: "background 1.1s ease",
+          }}
+        />
+
+        {/* ground shadow */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: "52%",
+            bottom: "2%",
+            transform: "translateX(-50%)",
+            width: "52%",
+            height: 32,
+            background: "radial-gradient(ellipse at center, rgba(24,32,16,0.26), transparent 68%)",
+            filter: "blur(7px)",
+          }}
+        />
+
+        {/* ingredients — behind the pouch */}
+        {ING_BEHIND.map((ing, i) => (
           <div
+            key={ing.src}
             aria-hidden="true"
-            className="absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full"
             style={{
-              width: "clamp(420px, 60vw, 760px)",
-              background: FLAVORS[active].circle,
-              transition: "background 0.9s ease",
+              position: "absolute",
+              left: ing.left,
+              bottom: ing.bottom,
+              width: ing.width,
+              pointerEvents: "none",
+              ...ingStyle(i, 0.35),
             }}
-          />
-          {/* Ground shadow */}
-          <div
-            aria-hidden="true"
-            className="absolute left-1/2 top-[74%] h-10 w-[52%] -translate-x-1/2 rounded-[50%]"
-            style={{ background: "radial-gradient(ellipse, rgba(20,25,15,0.28) 0%, transparent 70%)" }}
-          />
-
-          {/* Floating ingredients — behind */}
-          {FLAVORS.map((f, i) => (
-            <div
-              key={`b-${f.name}`}
-              aria-hidden="true"
-              className="mtsa-float absolute left-[12%] top-[16%] w-[26%]"
-              style={{ ...ingStyle(i, 0.35), animationDuration: "6.2s" }}
-            >
-              <Image src={f.ingredients[0]} alt="" width={220} height={220} className="h-auto w-full" />
+          >
+            <div style={{ animation: ing.anim }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={ing.src}
+                alt={ing.alt}
+                draggable={false}
+                style={{ width: "100%", transform: `rotate(${ing.rotate})`, filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.18))" }}
+              />
             </div>
-          ))}
+          </div>
+        ))}
 
-          {/* Pouches */}
+        {/* floating pouch stack */}
+        <div
+          style={{
+            position: "relative",
+            height: "clamp(360px, 44vw, 580px)",
+            aspectRatio: "0.62",
+            animation: "mtsa-float 6.5s ease-in-out infinite",
+            zIndex: 2,
+          }}
+        >
           {FLAVORS.map((f, i) => (
-            <div
-              key={f.pouch}
-              className="absolute left-1/2 top-1/2 w-[56%] -translate-x-1/2 -translate-y-1/2 origin-bottom"
-              style={pouchStyle(i)}
-            >
-              <Image
+            <div key={f.pouch} style={pouchStyle(i)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={f.pouch}
-                alt={`${f.name} pouch`}
-                width={480}
-                height={620}
-                priority={i === 0}
-                className="h-auto w-full drop-shadow-[0_28px_38px_rgba(20,25,15,0.28)]"
+                alt={f.pouchAlt}
+                draggable={false}
+                style={{ height: "100%", width: "auto", userSelect: "none", filter: "drop-shadow(0 24px 34px rgba(24,32,16,0.22))" }}
               />
             </div>
           ))}
-
-          {/* Floating ingredients — front */}
-          {FLAVORS.map((f, i) => (
-            <div
-              key={`f-${f.name}`}
-              aria-hidden="true"
-              className="mtsa-float absolute right-[10%] top-[58%] z-[4] w-[22%]"
-              style={{ ...ingStyle(i, 0.55), animationDuration: "5.4s" }}
-            >
-              <Image src={f.ingredients[1]} alt="" width={200} height={200} className="h-auto w-full" />
-            </div>
-          ))}
         </div>
+
+        {/* ingredients — in front of the pouch */}
+        {ING_FRONT.map((ing, i) => (
+          <div
+            key={ing.src}
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              right: ing.right,
+              bottom: ing.bottom,
+              width: ing.width,
+              pointerEvents: "none",
+              zIndex: 3,
+              ...ingStyle(i, 0.55),
+            }}
+          >
+            <div style={{ animation: ing.anim }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={ing.src}
+                alt={ing.alt}
+                draggable={false}
+                style={{ width: "100%", transform: `rotate(${ing.rotate})`, filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.2))" }}
+              />
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
