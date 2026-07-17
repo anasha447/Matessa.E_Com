@@ -77,7 +77,7 @@ export function ProvisionModal({ onClose, onCreated }: { onClose: () => void; on
         </Field>
       </div>
       <Field label="Email" error={errors.email}>
-        <input className="text-input" type="email" value={form.email} onChange={set("email")} placeholder="name@adventuredose.com" autoComplete="off" />
+        <input className="text-input" type="email" value={form.email} onChange={set("email")} placeholder="name@matessa.com" autoComplete="off" />
       </Field>
       <Field label="Phone (optional)">
         <input className="text-input" type="tel" value={form.phone} onChange={set("phone")} autoComplete="off" />

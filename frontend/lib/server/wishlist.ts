@@ -6,7 +6,7 @@ import type { CategoryResponse, WishlistResponse } from "@/lib/api";
 import type { ProductCardData } from "@/lib/types/product-card";
 import { getAccessToken, serverGet } from "./session";
 
-const PLACEHOLDER = "/design/helmetVenomFront.png";
+const PLACEHOLDER = "/brand/leaf-pattern-light.webp";
 
 export interface WishlistEntry {
   wishlistItemId: number;

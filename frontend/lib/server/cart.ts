@@ -17,7 +17,7 @@ export interface CartViewData {
   subtotal: number;
 }
 
-const PLACEHOLDER = "/design/helmetVenomFront.png";
+const PLACEHOLDER = "/brand/leaf-pattern-light.webp";
 
 async function imageForVariant(variantId: number, cache: Map<number, string>): Promise<string> {
   try {
