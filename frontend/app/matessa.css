@@ -209,3 +209,25 @@
 .mdrawer-sublink:hover {
   color: var(--action-hover);
 }
+
+/* ---- Landing keyframes (design: Matessa Landing v4) ---- */
+@keyframes mtsa-float {
+  from { transform: translateY(-12px); }
+  to { transform: translateY(12px); }
+}
+.mtsa-float {
+  animation: mtsa-float 6s ease-in-out infinite alternate;
+}
+@keyframes mtsa-pan {
+  from { background-position: 0 0; }
+  to { background-position: 340px 340px; }
+}
+.mtsa-pan {
+  animation: mtsa-pan 22s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mtsa-float,
+  .mtsa-pan {
+    animation: none;
+  }
+}

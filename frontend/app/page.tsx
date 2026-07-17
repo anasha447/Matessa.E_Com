@@ -1,18 +1,72 @@
+import { api } from "@/lib/api";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { HeroFlavorCycler } from "@/components/home/HeroFlavorCycler";
+import { CurvedMarquee } from "@/components/home/CurvedMarquee";
+import { HealthFocus } from "@/components/home/HealthFocus";
+import { BlendCards, type BlendCardData } from "@/components/home/BlendCards";
+import { WhyDrinkMate } from "@/components/home/WhyDrinkMate";
+import { EnergyComparison } from "@/components/home/EnergyComparison";
+import { DomeGallery } from "@/components/home/DomeGallery";
 
-/** Landing page — sections land here in Phase 2 (design: Matessa Landing v4). */
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+// Design pouch art per blend slug (the cards use pouches, not pack shots);
+// products outside this map fall back to their catalog image.
+const POUCHES: Record<string, string> = {
+  "masala-mate": "/brand/pouch-masala.webp",
+  "lemon-ginger-mate": "/brand/pouch-lemon-ginger.webp",
+  "raw-mate": "/brand/pouch-raw.webp",
+};
+
+/** The "Our Blends" cards come from the live catalog: products of the Mate category
+ *  plus each product's first active variant for quick add-to-cart. */
+async function getBlends(): Promise<BlendCardData[]> {
+  try {
+    const cats = await api.categories.list();
+    const mate = cats.find((c) => c.name.toLowerCase() === "mate") ?? cats[0];
+    if (!mate) return [];
+    const page = await api.products.list({ categoryId: mate.id, size: 6 });
+    return await Promise.all(
+      page.content.map(async (p): Promise<BlendCardData> => {
+        let variantId: number | null = null;
+        let image = POUCHES[p.slug] ?? "";
+        try {
+          const variants = await api.variants.listForProduct(p.id);
+          variantId = variants.find((v) => v.active)?.id ?? variants[0]?.id ?? null;
+        } catch {
+          // quick-add disabled if variants can't load
+        }
+        if (!image) {
+          try {
+            const images = await api.images.listForProduct(p.id);
+            image = (images.find((i) => i.primary) ?? images[0])?.url ?? "/brand/leaf-pattern-light.webp";
+          } catch {
+            image = "/brand/leaf-pattern-light.webp";
+          }
+        }
+        return { name: p.name, slug: p.slug, price: p.basePrice, image, variantId };
+      }),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Landing page — Matessa Landing v4, section for section. */
+export default async function HomePage() {
+  const blends = await getBlends();
   return (
     <>
       <SiteHeader variant="overlay" />
-      <main className="min-h-[70svh] bg-white pt-24 nav:pt-32">
-        <div className="mx-auto max-w-3xl px-6 text-center">
-          <h1 className="font-heading font-bold text-darkgreen [font-size:clamp(42px,5.2vw,74px)] leading-[1.06] tracking-tight text-balance">
-            The Ritual of <em className="italic text-green">Natural Energy</em>
-          </h1>
-          <p className="mt-6 text-gray-600">Landing sections are being brewed (Phase 2).</p>
-        </div>
+      <main>
+        <HeroFlavorCycler />
+        <CurvedMarquee />
+        <HealthFocus />
+        <BlendCards blends={blends} />
+        <WhyDrinkMate />
+        <EnergyComparison />
+        <DomeGallery />
       </main>
       <SiteFooter variant="full" />
     </>

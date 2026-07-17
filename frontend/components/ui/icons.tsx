@@ -131,3 +131,63 @@ export function UserIcon({ size, ...p }: IconProps) {
     </svg>
   );
 }
+
+// ---- Matessa benefit/product icons (Lucide-style strokes, added for the rebuild) ----
+
+export function LeafIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+      <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+    </svg>
+  );
+}
+
+export function ZapIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  );
+}
+
+export function HeartPulseIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+      <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27" />
+    </svg>
+  );
+}
+
+export function ShieldIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    </svg>
+  );
+}
+
+export function DropletIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
+    </svg>
+  );
+}
+
+export function FlameIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+    </svg>
+  );
+}
+
+export function StarIcon({ size = 18, filled = false, ...p }: IconProps & { filled?: boolean }) {
+  return (
+    <svg {...base({ size, ...p })} fill={filled ? "currentColor" : "none"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16z" />
+    </svg>
+  );
+}
