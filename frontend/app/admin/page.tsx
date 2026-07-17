@@ -4,13 +4,15 @@ import { getDashboardData } from "@/lib/server/analytics";
 import { formatMoney } from "@/lib/utils/money";
 import { Donut, HBars, KpiCard, StatusBadge, type BarRow } from "@/components/admin/ui";
 import { TrendChart } from "@/components/admin/TrendChart";
+import { IndiaOrdersMap } from "@/components/admin/IndiaOrdersMap";
 import { icons } from "@/components/admin/icons";
 
 export const dynamic = "force-dynamic";
 
 const PM_LABEL: Record<string, string> = { CARD: "Card", PAYPAL: "PayPal", COD: "Cash on delivery" };
+// Status semantics on the Matessa palette: orange = needs action, greens = healthy flow.
 const STATUS_COLOR: Record<string, string> = {
-  PENDING: "#FF6B1A",
+  PENDING: "#F26323",
   PAID: "#E0A92E",
   SHIPPED: "#2E9CC4",
   DELIVERED: "#3F8F5B",
@@ -21,7 +23,8 @@ const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 export default async function AdminDashboardPage() {
   const user = await getCurrentUser();
   const isAdmin = user?.roles.includes("ADMIN") ?? false;
-  const { sales, catalog, trend, topProducts, topCustomers, customers } = await getDashboardData(isAdmin);
+  const { sales, catalog, trend, topProducts, topCustomers, customers, ordersByState } =
+    await getDashboardData(isAdmin);
 
   if (!sales || !catalog) {
     return (
@@ -44,15 +47,17 @@ export default async function AdminDashboardPage() {
     label: PM_LABEL[p.paymentMethod] ?? p.paymentMethod,
     value: p.revenue,
     sub: `${p.orders} orders`,
-    color: ["#FF6B1A", "#2E9CC4", "#33414F"][i % 3],
+    color: ["#3E5F2D", "#7A9D3E", "#F26323"][i % 3],
   }));
 
   return (
     <div className="adm-content">
+      {/* Headline KPIs (kpi-dashboard-design: 5-second executive scan — money now,
+          money trend, volume, and the alert that needs action today). */}
       <div className="kpi-grid">
         <KpiCard accent label="Revenue · this month" value={sales.revenue.thisMonth} money delta={sales.revenue.monthOverMonthPct} sub="vs last month" />
-        <KpiCard label="Revenue · this year" value={sales.revenue.thisYear} money />
-        <KpiCard label="Revenue · all time" value={sales.revenue.allTime} money />
+        <KpiCard label="Revenue · today" value={sales.revenue.today} money sub={`week ${formatMoney(sales.revenue.thisWeek)}`} />
+        <KpiCard label="Revenue · this year" value={sales.revenue.thisYear} money sub={`all time ${formatMoney(sales.revenue.allTime)}`} />
         <KpiCard label="Total orders" value={sales.totalOrders} sub={`AOV ${formatMoney(sales.averageOrderValue)}`} />
         <KpiCard label="Refunds" value={sales.refunds.amount} money sub={`${sales.refunds.count} refunds`} />
       </div>
@@ -219,9 +224,9 @@ export default async function AdminDashboardPage() {
                 centerValue={customers.totalUsers.toLocaleString()}
                 centerLabel="users"
                 segments={[
-                  { label: "Customers", value: customers.usersByRole.CUSTOMER ?? 0, color: "#33414F" },
-                  { label: "Managers", value: customers.usersByRole.MANAGER ?? 0, color: "#2E9CC4" },
-                  { label: "Admins", value: customers.usersByRole.ADMIN ?? 0, color: "#FF6B1A" },
+                  { label: "Customers", value: customers.usersByRole.CUSTOMER ?? 0, color: "#3E5F2D" },
+                  { label: "Managers", value: customers.usersByRole.MANAGER ?? 0, color: "#7A9D3E" },
+                  { label: "Admins", value: customers.usersByRole.ADMIN ?? 0, color: "#F26323" },
                 ]}
               />
               <div className="stat-rows" style={{ marginTop: 8 }}>
@@ -237,6 +242,16 @@ export default async function AdminDashboardPage() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h3>Orders across India</h3>
+          <span className="sub">by shipping state · excludes cancelled</span>
+        </div>
+        <div className="card-body">
+          <IndiaOrdersMap data={ordersByState} />
+        </div>
       </div>
     </div>
   );

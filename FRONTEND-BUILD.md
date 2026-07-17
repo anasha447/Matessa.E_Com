@@ -1,4 +1,4 @@
-# FRONTEND-BUILD.md — Adventure Dose (Design → Next.js translation)
+# FRONTEND-BUILD.md — Matessa (Design → Next.js translation)
 
 > **For the frontend agent.** This doc governs *translating the existing Claude Design output (HTML + Tailwind) into the production Next.js app*. It covers process, conventions, and the file/animation rules for that translation. It does **not** restate visual identity or design system — those are authoritative in `BRAND.md` and `DESIGN-SYSTEM.md`; read those for all styling/layout/token decisions. Data/API behavior: `ARCHITECTURE.md`, `DATA-MODEL.md`, and the provided `api.md`. When code conflicts with this doc, this doc wins unless the human says otherwise.
 
@@ -17,7 +17,7 @@ A frontend was designed in Claude Design as **HTML + Tailwind utility classes** 
 
 A Claude Code agent **cannot browse a Claude Design workspace URL** and pull files. It works against files in the repo. So:
 
-1. **Export the design source into the repo.** The human exports the HTML/CSS (and any assets) from Claude Design into a folder, e.g. `/design-source/` (one subfolder or file per page: `home.html`, etc.). The agent reads these as the translation source.
+1. **The design source is already exported to `/design-source/`.** Pages live at `design-source/project/*.dc.html` — the canonical landing is **`Matessa Landing v4.dc.html`** (v3 is superseded; do not translate it). Interactive sections exist as React JSX in `design-source/project/src/` (mateRitual, world-map, time-line-mate, quotes, whatismate, indian-mate) and assets in `design-source/project/assets/`. New/updated pages get exported into the same folder.
 2. The workspace **link is for the human** (to view/verify and copy markup), not a source the agent can fetch.
 3. **Fallback if export is messy:** the human pastes the page markup directly into the task, page by page, and the agent translates from that.
 4. Treat `/design-source/` as **read-only reference** — never ship it; it stays out of the app build (and can be `.gitignore`d or kept in a non-bundled folder). The real app lives under the Next.js `app/` structure.
@@ -33,7 +33,8 @@ A Claude Code agent **cannot browse a Claude Design workspace URL** and pull fil
 - **Componentize, don't dump.** Repeated markup (cards, buttons, nav) → reusable typed components with props. A page is composed of components, not one giant block of JSX.
 - **Type everything.** Props via `interface`/`type`; no `any`. Where component data mirrors backend shapes, derive the types from `api.md`/`DATA-MODEL.md`.
 - **Next.js App Router conventions.** Pages under `app/`. Default to **Server Components**; add `"use client"` only to components that need interactivity/state/browser APIs (e.g. the hero animation, interactive cards, anything with `useState`/`useEffect`/scroll hooks). Keep client boundaries as small as possible.
-- **`next/image`** for images, **`next/link`** for navigation, **`next/font`** for fonts (Magnetar setup per `DESIGN-SYSTEM.md`).
+- **`next/image`** for images, **`next/link`** for navigation, **`next/font/google`** for fonts (Asul + Quicksand per `BRAND.md §3`).
+- **The design's JSX sections are already React** — "translation" for those means: convert to TypeScript, fit App Router (server component by default, `"use client"` only where interactive), replace the prototype's axios/redux with this repo's `lib/api` + server helpers, and keep framer-motion for the motion they define.
 - **Semantic, accessible markup.** Proper landmarks/headings/labels/alt text; visible focus states; keyboard operability — preserve or improve on the design.
 - **Match, don't redecorate.** Don't introduce new colors, radii, fonts, or layout patterns beyond what the design + `BRAND.md`/`DESIGN-SYSTEM.md` specify.
 
@@ -43,9 +44,9 @@ A Claude Code agent **cannot browse a Claude Design workspace URL** and pull fil
 
 The design's motion (e.g. the hero scroll-swap) must be rebuilt as **typed React**, not ported as vanilla JS.
 
-- **Approach:** implement scroll/parallax/reveal with a React-friendly, TS-typed library (e.g. **Framer Motion** `useScroll`/`useTransform`, or GSAP via a typed wrapper) inside a `"use client"` component. No `<script>` tags, no manual scroll listeners.
-- **Hero helmet-swap:** build per `DESIGN-SYSTEM.md §8` (the mechanics, asset requirements, and graceful-degradation/`prefers-reduced-motion` rules are defined there — follow them; this doc does not restate them).
-- **Motion posture:** subtle and fast, per `DESIGN-SYSTEM.md §7`. Always honor `prefers-reduced-motion`.
+- **Approach:** implement scroll/parallax/reveal with **Framer Motion** (`useScroll`/`useTransform`) inside `"use client"` components — the design's JSX sections already use it; keep it. No `<script>` tags, no manual scroll listeners.
+- **Key motion surfaces:** the landing hero (v4), the What-is-Mate scroll-reveal page, the marquee announcement bar, parallax quote banners — specs in `DESIGN-SYSTEM.md §10` and the source JSX in `design-source/project/src/`.
+- **Motion posture:** calm and botanical, per `DESIGN-SYSTEM.md §10`. Always honor `prefers-reduced-motion`.
 - Pick the implementation library yourself (idiomatic, well-typed, tree-shakeable); state the choice in the plan.
 
 ---
@@ -60,8 +61,8 @@ app/
   (routes…)             // other pages as designed
 components/
   ui/                   // primitives: Button, Card, Badge, Input, QtyStepper…
-  layout/               // Nav (BottomTabBar/TopNav), Footer, SectionHeading
-  hero/                 // the helmet-swap hero (client component)
+  layout/               // TopBar + MobileDrawer (left slide-in — NO bottom tab bar), Footer, SectionHeading
+  home/                 // landing sections (hero, Our Blends, Why Drink Mate?, gallery…)
   product/              // ProductCard, VariantSelector, PriceTag…
 lib/
   types.ts              // shared types (derived from api.md / DATA-MODEL.md)
@@ -83,10 +84,9 @@ Build the **primitives in `components/ui/` first**, then assemble pages from the
 ---
 
 ## 7. Assets the human provides
-- `/design-source/` — exported HTML/Tailwind per page (or pasted markup).
-- Hero assets per `DESIGN-SYSTEM.md §8` (man photo + angle-matched transparent helmet PNGs + per-helmet palette color).
-- Magnetar font files (self-hosted) per `DESIGN-SYSTEM.md`.
-- Logo + wing-motif SVG, and any other brand imagery.
+- `/design-source/` — the exported handoff (already in the repo; new pages get added here).
+- Brand imagery beyond the handoff, if any (logos/patterns/product shots already extracted to `frontend/public/brand/`).
 - `api.md` for data shapes/types.
+- Fonts need nothing from the human — Asul + Quicksand come from `next/font/google`.
 
 > Styling, tokens, layout, motion specs, and the hero mechanics are NOT in this file by design — they live in `BRAND.md` and `DESIGN-SYSTEM.md`. This file is only the *translation process and code conventions*.

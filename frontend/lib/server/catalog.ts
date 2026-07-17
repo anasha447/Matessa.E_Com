@@ -1,26 +1,25 @@
 // Server-side catalog data for storefront pages. Runs in Server Components: it calls
 // the public catalog endpoints through @/lib/api (no auth needed) and assembles the
-// backend DTOs into the view models the design components consume. Every function
-// degrades gracefully to the design's stub content if the backend is down or empty,
-// so pages always render.
+// backend DTOs into the view models the design components consume. Degrades gracefully
+// to empty results if the backend is unreachable, so pages still render.
 import { api } from "@/lib/api";
 import type { CategoryResponse, ProductResponse } from "@/lib/api";
-import type { ProductCardData } from "@/components/product/ProductCard";
-import {
-  categories as stubCategories,
-  latestProducts as stubProducts,
-  type CategoryTile,
-} from "@/lib/stubs/home";
+import type { ProductCardData } from "@/lib/types/product-card";
 
 // Fallback image when a product has no images yet in the catalog.
-const PLACEHOLDER_IMAGE = "/design/helmetVenomFront.png";
+const PLACEHOLDER_IMAGE = "/brand/leaf-pattern-light.webp";
+
+export interface CategoryTile {
+  name: string;
+  count: number;
+  href: string;
+}
 
 /** Top-level categories with a live product count, mapped to the nav tiles/tabs. */
 export async function getStorefrontCategories(): Promise<CategoryTile[]> {
   try {
     const cats = await api.categories.list();
-    if (cats.length === 0) return stubCategories;
-    const tiles = await Promise.all(
+    return await Promise.all(
       cats.map(async (c): Promise<CategoryTile> => {
         let count = 0;
         try {
@@ -31,9 +30,8 @@ export async function getStorefrontCategories(): Promise<CategoryTile[]> {
         return { name: c.name, count, href: `/shop?category=${c.id}` };
       }),
     );
-    return tiles;
   } catch {
-    return stubCategories;
+    return [];
   }
 }
 
@@ -44,13 +42,12 @@ export async function getFeaturedProducts(limit = 8): Promise<ProductCardData[]>
       api.products.list({ size: limit }),
       api.categories.list().catch(() => [] as CategoryResponse[]),
     ]);
-    if (page.content.length === 0) return stubProducts;
     const nameById = new Map(cats.map((c) => [c.id, c.name]));
     return await Promise.all(
       page.content.map((p) => toProductCard(p, nameById.get(p.categoryId))),
     );
   } catch {
-    return stubProducts;
+    return [];
   }
 }
 
@@ -65,12 +62,11 @@ export async function getCategoryNav(): Promise<CategoryNavItem[]> {
     const cats = await api.categories.list();
     return cats.map((c) => ({ id: c.id, name: c.name }));
   } catch {
-    return stubCategories.map((c, i) => ({ id: i + 1, name: c.name }));
+    return [];
   }
 }
 
-/** A page of products as cards, optionally filtered by category. Empty category →
- *  empty grid (legit); only a backend error falls back to stubs. */
+/** A page of products as cards, optionally filtered by category. */
 export async function getProductsPage(
   opts: { categoryId?: number; page?: number; size?: number } = {},
 ): Promise<{ items: ProductCardData[]; total: number }> {
@@ -85,7 +81,7 @@ export async function getProductsPage(
     );
     return { items, total: page.page.totalElements };
   } catch {
-    return { items: stubProducts, total: stubProducts.length };
+    return { items: [], total: 0 };
   }
 }
 
@@ -107,7 +103,7 @@ async function toProductCard(
   }
   return {
     name: product.name,
-    category: categoryName ?? "Gear",
+    category: categoryName ?? "Matessa",
     price: product.basePrice,
     image,
     alt,

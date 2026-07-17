@@ -1,36 +1,28 @@
 import type { Metadata } from "next";
-import { Barlow, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
+import { Asul, Quicksand } from "next/font/google";
 import "./globals.css";
-import "./adventure.css";
-import "./pages.css";
+import "./matessa.css";
 import { cookies } from "next/headers";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/session/cookies";
 import { CartProvider } from "@/components/cart/CartContext";
-import { CartDrawer } from "@/components/cart/CartDrawer";
-import { NewsletterPopup } from "@/components/newsletter/NewsletterPopup";
 
-// Google fonts → CSS variables consumed by the design tokens in adventure.css
-// (--font-body, --font-action, --font-mono). Sprintura/Magnetar (display) are
-// self-hosted via @font-face in adventure.css.
-const barlow = Barlow({
+// Matessa brand fonts (BRAND.md §3) → --font-asul / --font-quicksand, consumed by
+// the @theme block in globals.css and the tokens in matessa.css.
+const asul = Asul({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-barlow",
+  weight: ["400", "700"],
+  variable: "--font-asul",
 });
-const barlowCondensed = Barlow_Condensed({
+const quicksand = Quicksand({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-barlow-condensed",
-});
-const jetBrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-quicksand",
 });
 
 export const metadata: Metadata = {
-  title: "Adventure Dose — Home",
+  title: "Matessa — A Sip From Nature, A Taste Of Cultures",
   description:
-    "Outdoor & adventure gear — helmets, clothes, and artwork. Every piece has a story.",
+    "Premium yerba mate for India — Masala, Lemon & Ginger and Raw loose-leaf blends, plus gourds and bombillas. Natural, focused energy from matessa.in.",
 };
 
 export default async function RootLayout({
@@ -43,20 +35,11 @@ export default async function RootLayout({
   const jar = await cookies();
   const authed = jar.has(ACCESS_COOKIE) || jar.has(REFRESH_COOKIE);
   return (
-    <html
-      lang="en"
-      data-theme="dark"
-      className={`${barlow.variable} ${barlowCondensed.variable} ${jetBrainsMono.variable}`}
-    >
-      {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's
-          cz-shortcut-listen) inject attributes onto <body> before React hydrates,
-          which is harmless but otherwise logs a hydration mismatch. */}
+    <html lang="en" className={`${asul.variable} ${quicksand.variable}`}>
+      {/* suppressHydrationWarning: browser extensions inject attributes onto <body>
+          before React hydrates — harmless, but otherwise logs a mismatch. */}
       <body suppressHydrationWarning>
-        <CartProvider authed={authed}>
-          {children}
-          <CartDrawer />
-          <NewsletterPopup guest={!authed} />
-        </CartProvider>
+        <CartProvider authed={authed}>{children}</CartProvider>
       </body>
     </html>
   );

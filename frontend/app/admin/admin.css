@@ -10,12 +10,12 @@
 
 
 .admin {
-  --accent:        #FF6B1A;
-  --accent-hover:  #E65A0E;
-  --accent-tint:   #FFE7D6;
-  --on-accent:     #3A1500;
-  --cool:          #2E9CC4;
-  --cool-tint:     rgba(46,156,196,.12);
+  --accent:        #3E5F2D;   /* Matessa green — primary */
+  --accent-hover:  #F26323;   /* the single hover accent */
+  --accent-tint:   #E9F0E1;
+  --on-accent:     #F9F7F3;
+  --cool:          #7A9D3E;   /* Matessa lightgreen */
+  --cool-tint:     rgba(122,157,62,.14);
   --success:       #3F8F5B;
   --warning:       #E0A92E;
   --danger:        #D24B3E;
@@ -32,10 +32,10 @@
   --steel: #33414F;
   --fog:   #EEF1F4;
 
-  --radius: 6px;
-  --font-display: "Sprintura", var(--font-barlow-condensed), sans-serif;
-  --font-action: var(--font-barlow-condensed), var(--font-barlow), sans-serif;
-  --font-body: var(--font-barlow), sans-serif;
+  --radius: 10px;
+  --font-display: var(--font-asul), serif;
+  --font-action: var(--font-quicksand), system-ui, sans-serif;
+  --font-body: var(--font-quicksand), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), monospace;
   --shadow-overlay: 0 12px 32px rgba(20,23,28,.18);
 
@@ -624,3 +624,73 @@ select.text-input { appearance: none; background-image: url("data:image/svg+xml;
 .img-drop-hint strong { font-size: 15px; }
 .img-drop-hint span { font-size: 12.5px; color: var(--text-secondary); }
 .img-preview { max-height: 260px; width: 100%; object-fit: contain; }
+
+/* ---- India orders map (end of dashboard) ---- */
+.india-map {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .india-map { grid-template-columns: 1fr; }
+}
+.india-map-canvas { position: relative; }
+.india-map-canvas svg { width: 100%; height: auto; display: block; }
+.india-state {
+  stroke: #5A6675;            /* state borders always visible */
+  stroke-width: 0.6;
+  cursor: pointer;
+  transition: fill 150ms ease-in-out, stroke 150ms ease-in-out;
+  outline: none;
+}
+.india-state:hover,
+.india-state:focus-visible,
+.india-state.is-active {
+  stroke: var(--accent-hover);
+  stroke-width: 1.4;
+}
+.india-map-tip {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+  font-size: 13px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  min-width: 150px;
+}
+.india-map-tip b { color: var(--text-primary); font-size: 14px; }
+.india-map-total {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+.india-map-total b {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--accent);
+  line-height: 1.1;
+}
+.india-map-total span { font-size: 12.5px; color: var(--text-secondary); }
+.india-map-row {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding-block: 6px;
+  cursor: pointer;
+}
+.india-map-row.is-active .lbl { color: var(--accent); font-weight: 700; }
+.india-map-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}

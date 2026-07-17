@@ -1,0 +1,211 @@
+/* Matessa design tokens — single source of truth (DESIGN-SYSTEM.md §2).
+   Imported LAST in app/layout.tsx so these win over the legacy adventure.css
+   values during the page-by-page translation; when the last Adventure Dose
+   screen is retired, adventure.css is deleted and this file remains.
+   Values come from design-source/project/_ds/tokens/*.css — do not invent new
+   tokens here without updating DESIGN-SYSTEM.md. */
+
+:root {
+  /* ---- colors ---- */
+  --color-green: #3E5F2D;        /* primary */
+  --color-lightgreen: #7A9D3E;
+  --color-darkgreen: #2F3B28;    /* chrome + headings */
+  --color-orange: #F26323;       /* the single action/hover accent */
+  --color-orange-hover: #E85D1F;
+  --color-craemy: #EADBA2;
+  --color-yellow: #F3CB57;
+  --color-black: #121212;
+  --color-white: #F9F7F3;        /* warm off-white page background */
+
+  /* ---- semantic ---- */
+  --surface-page: var(--color-white);
+  --surface-card: #FFFFFF;
+  --surface-dark: var(--color-darkgreen);
+  --surface-dark-hover: #4A5C40;
+  --text-heading: var(--color-darkgreen);
+  --text-body: #374151;
+  --text-muted: #6B7280;
+  --text-on-dark: var(--color-craemy);
+  --text-on-dark-secondary: #D1D5DB;
+  --text-price: var(--color-green);
+  --action-primary: var(--color-green);
+  --action-hover: var(--color-orange);
+  --accent-highlight: var(--color-yellow);
+  --border-subtle: #E5E7EB;
+  --border-card: #6B7280;
+  --border-on-dark: rgba(255, 255, 255, 0.10);
+
+  /* ---- shape & elevation ---- */
+  --radius: 0.625rem;            /* overrides legacy 6px — curves are the brand */
+  --radius-2xl: 1rem;            /* review cards */
+  --radius-card: 2rem;           /* product image tiles */
+  --radius-pill: 9999px;         /* commerce CTAs, badges */
+  --shadow-card: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-card-hover: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --container-max: 80rem;
+
+  /* ---- type (families injected by next/font in app/layout.tsx) ---- */
+  --font-heading: var(--font-asul), serif;
+  --font-body: var(--font-quicksand), system-ui, sans-serif;
+
+  /* ---- motion ---- */
+  --duration-fast: 300ms;
+  --duration-slow: 500ms;
+}
+
+/* ---- Mobile left drawer (replaces the retired bottom tab bar) ---- */
+.mdrawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(15, 35, 20, 0.45);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) ease-in-out;
+}
+.mdrawer-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mdrawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 95;
+  width: min(84vw, 340px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-dark);
+  color: var(--text-on-dark);
+  border-radius: 0 var(--radius-2xl) var(--radius-2xl) 0;
+  box-shadow: var(--shadow-card-hover);
+  transform: translateX(calc(-100% - 24px));
+  transition: transform var(--duration-fast) ease-in-out;
+}
+.mdrawer.is-open {
+  transform: translateX(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mdrawer,
+  .mdrawer-overlay {
+    transition: none;
+  }
+}
+.mdrawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border-on-dark);
+}
+.mdrawer-brand {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--color-craemy);
+  letter-spacing: 0.02em;
+}
+.mdrawer-close {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-pill);
+  color: var(--text-on-dark);
+  transition: color var(--duration-fast) ease-in-out;
+}
+.mdrawer-close:hover {
+  color: var(--action-hover);
+}
+.mdrawer-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+.mdrawer-link {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--text-on-dark);
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  transition: color var(--duration-fast) ease-in-out, background var(--duration-fast) ease-in-out,
+    padding-left var(--duration-fast) ease-in-out;
+}
+.mdrawer-link:hover {
+  color: var(--action-hover);
+  background: var(--surface-dark-hover);
+  padding-left: 20px;
+}
+.mdrawer-link.is-active {
+  color: var(--accent-highlight);
+}
+.mdrawer-auth {
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0));
+  border-top: 1px solid var(--border-on-dark);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mdrawer-signup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  border-radius: var(--radius-pill);
+  background: var(--action-primary);
+  color: #fff;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 1rem;
+  transition: background var(--duration-fast) ease-in-out;
+}
+.mdrawer-signup:hover {
+  background: var(--action-hover);
+}
+.mdrawer-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  transition: background var(--duration-fast) ease-in-out;
+}
+.mdrawer-account:hover {
+  background: var(--surface-dark-hover);
+}
+.mdrawer-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-craemy);
+  background: var(--surface-dark-hover);
+}
+.mdrawer-account-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.mdrawer-account-text strong {
+  font-family: var(--font-body);
+  font-weight: 700;
+  color: var(--text-on-dark);
+}
+.mdrawer-account-text small {
+  color: var(--text-on-dark-secondary);
+  font-size: 0.8125rem;
+}
+.mdrawer-sublink {
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-on-dark-secondary);
+  transition: color var(--duration-fast) ease-in-out;
+}
+.mdrawer-sublink:hover {
+  color: var(--action-hover);
+}
