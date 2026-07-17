@@ -41,6 +41,10 @@ export const ordersApi = {
 
   get: (id: number) => http.get<OrderResponse>(`/api/orders/${id}`),
 
+  /** Owner/staff lookup by the customer-facing order number (MA…). */
+  getByNumber: (orderNumber: string) =>
+    http.get<OrderResponse>(`/api/orders/by-number/${encodeURIComponent(orderNumber)}`),
+
   cancel: (id: number) => http.post<OrderResponse>(`/api/orders/${id}/cancel`),
 
   history: (id: number) =>

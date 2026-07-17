@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { ShopHero } from "@/components/shop/ShopHero";
 import { ShopTabs } from "@/components/shop/ShopTabs";
 import { ProductCard } from "@/components/product/ProductCard";
 import { getCategoryNav, getProductsPage } from "@/lib/server/catalog";
@@ -31,14 +32,8 @@ export default async function ShopPage({
     <>
       <SiteHeader />
       <main className="min-h-[70svh]">
+        <ShopHero title={activeName ?? "Our Products"} count={total} />
         <div className="mx-auto max-w-[1200px] px-5 py-10 nav:px-8 nav:py-14">
-          <h1 className="mb-2 text-center font-heading text-3xl font-bold text-darkgreen md:text-4xl">
-            {activeName ?? "Shop"}
-          </h1>
-          <p className="mb-8 text-center font-body text-sm text-gray-500">
-            {total} product{total === 1 ? "" : "s"}
-          </p>
-
           <ShopTabs categories={categories} activeId={categoryId} />
 
           {items.length === 0 ? (

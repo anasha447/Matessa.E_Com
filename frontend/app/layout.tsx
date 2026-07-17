@@ -5,6 +5,7 @@ import "./matessa.css";
 import { cookies } from "next/headers";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/session/cookies";
 import { CartProvider } from "@/components/cart/CartContext";
+import { CartDrawer } from "@/components/cart/CartDrawer";
 
 // Matessa brand fonts (BRAND.md §3) → --font-asul / --font-quicksand, consumed by
 // the @theme block in globals.css and the tokens in matessa.css.
@@ -39,7 +40,10 @@ export default async function RootLayout({
       {/* suppressHydrationWarning: browser extensions inject attributes onto <body>
           before React hydrates — harmless, but otherwise logs a mismatch. */}
       <body suppressHydrationWarning>
-        <CartProvider authed={authed}>{children}</CartProvider>
+        <CartProvider authed={authed}>
+          {children}
+          <CartDrawer />
+        </CartProvider>
       </body>
     </html>
   );
