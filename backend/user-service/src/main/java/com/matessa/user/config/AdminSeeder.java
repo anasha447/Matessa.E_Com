@@ -63,7 +63,7 @@ public class AdminSeeder implements ApplicationRunner {
         User admin = new User();
         admin.setEmail(email);
         admin.setPasswordHash(passwordEncoder.encode(password));
-        admin.setFirstName("Adventure");
+        admin.setFirstName("Matessa");
         admin.setLastName("Admin");
         admin.setEnabled(true);
         admin.getRoles().add(Role.ADMIN);
