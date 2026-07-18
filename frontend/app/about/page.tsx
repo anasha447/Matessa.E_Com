@@ -3,7 +3,6 @@ import Image from "next/image";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { Reveal } from "@/components/Reveal";
-import { PillLink } from "@/components/ui/brand";
 
 export const metadata: Metadata = {
   title: "Our Story — Matessa",
@@ -64,7 +63,13 @@ export default function AboutPage() {
               }`}
             >
               <Reveal className="w-full flex-1">
-                <Image src={c.image} alt={c.alt} width={520} height={420} className="w-full rounded-[2rem] object-cover shadow-lg" />
+                <Image
+                  src={c.image}
+                  alt={c.alt}
+                  width={520}
+                  height={420}
+                  className="h-[280px] w-full rounded-[2rem] object-cover shadow-lg nav:h-[360px]"
+                />
               </Reveal>
               <Reveal delay={120} className="flex-1">
                 <span className="font-heading text-5xl font-bold text-darkgreen/10">{c.n}</span>
@@ -73,18 +78,9 @@ export default function AboutPage() {
               </Reveal>
             </div>
           ))}
-
-          {/* CTA */}
-          <Reveal className="text-center">
-            <p className="font-body text-sm font-bold uppercase tracking-[0.24em] text-lightgreen">Two Worlds, One Cup</p>
-            <h2 className="mt-2 font-heading font-bold text-darkgreen [font-size:clamp(30px,4vw,48px)]">Taste the Story.</h2>
-            <div className="mt-6">
-              <PillLink href="/shop">Shop Matessa</PillLink>
-            </div>
-          </Reveal>
         </div>
       </main>
-      <SiteFooter variant="cta" />
+      <SiteFooter variant="full" />
     </>
   );
 }

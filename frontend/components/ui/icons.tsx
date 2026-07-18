@@ -132,6 +132,17 @@ export function UserIcon({ size, ...p }: IconProps) {
   );
 }
 
+/** Modern account icon — user inside a circle (Lucide circle-user-round). */
+export function AccountIcon({ size = 22, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 20a6 6 0 0 0-12 0" />
+      <circle cx="12" cy="10" r="4" />
+      <circle cx="12" cy="12" r="10" />
+    </svg>
+  );
+}
+
 // ---- Matessa benefit/product icons (Lucide-style strokes, added for the rebuild) ----
 
 export function LeafIcon({ size = 22, ...p }: IconProps) {
@@ -188,6 +199,35 @@ export function StarIcon({ size = 18, filled = false, ...p }: IconProps & { fill
   return (
     <svg {...base({ size, ...p })} fill={filled ? "currentColor" : "none"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16z" />
+    </svg>
+  );
+}
+
+// ---- Social icons (footer symbols) ----
+
+export function InstagramIcon({ size = 20, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function FacebookIcon({ size = 20, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+    </svg>
+  );
+}
+
+export function YoutubeIcon({ size = 20, ...p }: IconProps) {
+  return (
+    <svg {...base({ size, ...p })} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22.5 6.9a2.8 2.8 0 0 0-1.9-2C18.9 4.5 12 4.5 12 4.5s-6.9 0-8.6.4a2.8 2.8 0 0 0-1.9 2A29 29 0 0 0 1.1 12a29 29 0 0 0 .4 5.1 2.8 2.8 0 0 0 1.9 2c1.7.4 8.6.4 8.6.4s6.9 0 8.6-.4a2.8 2.8 0 0 0 1.9-2 29 29 0 0 0 .4-5.1 29 29 0 0 0-.4-5.1z" />
+      <path d="m9.75 15.5 5.2-3.5-5.2-3.5z" fill="currentColor" stroke="none" />
     </svg>
   );
 }

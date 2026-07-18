@@ -179,6 +179,16 @@ export function DomeGallery() {
             filter: "grayscale(1) brightness(0.92)",
           }}
         />
+        {/* soft cream curve at the top — the dark gallery arches UP into the white space
+            (convex: thin cream in the middle, thicker at the edges). */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 1440 120"
+          preserveAspectRatio="none"
+          style={{ position: "absolute", top: -1, left: 0, width: "100%", height: "clamp(48px, 6vw, 100px)", zIndex: 5, display: "block" }}
+        >
+          <path d="M0,0 L1440,0 L1440,96 C1080,12 360,12 0,96 Z" fill="#F9F7F3" />
+        </svg>
         <div
           ref={rootRef}
           className={`mtsa-dome${zoom ? " mtsa-dome-open" : ""}`}

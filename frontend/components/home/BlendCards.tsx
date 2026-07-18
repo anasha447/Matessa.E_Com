@@ -109,7 +109,10 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
         >
           {blends.map((b, i) => {
             const skin = SKINS[b.slug] ?? FALLBACK_SKIN;
-            const hot = hovered === i || centered === i;
+            // Desktop: reveal only on real hover. Mobile: the centered carousel card
+            // is "active". Keeping them separate stops the first card from showing its
+            // background at rest on desktop (centered defaults to 0).
+            const hot = isMobile ? centered === i : hovered === i;
             return (
               <Reveal key={b.slug} delay={i * 110} className="min-w-0 flex-[0_0_80%] snap-center nav:flex-none">
                 <div

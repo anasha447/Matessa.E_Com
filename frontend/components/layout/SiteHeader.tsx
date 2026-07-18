@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createHash } from "node:crypto";
 import { getCurrentUser } from "@/lib/server/session";
-import { UserIcon } from "@/components/ui/icons";
+import { AccountIcon } from "@/components/ui/icons";
 import { CartButton } from "@/components/cart/CartButton";
 import { NavLinks } from "./NavLinks";
 import { MobileDrawer, type DrawerUser } from "./MobileDrawer";
@@ -62,7 +62,7 @@ export async function SiteHeader({ variant = "solid" }: { variant?: "overlay" | 
             aria-label={user ? "My account" : "Sign in"}
             className="hidden nav:grid h-10 w-10 place-items-center rounded-full text-darkgreen transition-colors duration-300 hover:text-orange"
           >
-            <UserIcon />
+            <AccountIcon size={22} />
           </Link>
           <CartButton />
         </div>

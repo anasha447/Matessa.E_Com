@@ -2,6 +2,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { CurvedDivider } from "./CurvedDivider";
 import { PillLink } from "@/components/ui/brand";
+import { InstagramIcon, FacebookIcon, YoutubeIcon } from "@/components/ui/icons";
+
+const SOCIALS = [
+  { label: "Instagram", href: "https://instagram.com", Icon: InstagramIcon },
+  { label: "Facebook", href: "https://facebook.com", Icon: FacebookIcon },
+  { label: "YouTube", href: "https://youtube.com", Icon: YoutubeIcon },
+];
 
 // Pattern texture treatment used on the dark band (verbatim from Landing v4).
 const PATTERN_FILTER = "grayscale(1) invert(1) brightness(2.1) sepia(0.55) saturate(1.4)";
@@ -112,17 +119,11 @@ export function SiteFooter({
       <div style={{ background: "#2F3B28" }}>
         <div style={{ padding: "0 clamp(20px, 4vw, 48px) 32px" }}>
           <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(44px, 6vw, 64px)" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-                gap: "clamp(28px, 4vw, 44px)",
-                borderTop: "1px solid rgba(255,255,255,0.10)",
-                paddingTop: "clamp(36px, 5vw, 52px)",
-              }}
-            >
-              <div>
-                <Image src="/brand/full-logo.webp" alt="Matessa mate gourd logo" width={240} height={120} className="h-[120px] w-auto" />
+            {/* Mobile: Shop | Explore (2 cols), Support (full row), then the logo.
+                Desktop: logo + three columns in one row. */}
+            <div className="grid grid-cols-2 gap-x-8 gap-y-10 border-t border-white/10 pt-9 nav:grid-cols-[auto_1fr_1fr_1fr] nav:gap-11 nav:pt-12">
+              <div className="order-last col-span-2 flex justify-center pt-2 nav:order-first nav:col-span-1 nav:justify-start nav:pt-0">
+                <Image src="/brand/full-logo.webp" alt="Matessa mate gourd logo" width={240} height={120} className="h-[104px] w-auto nav:h-[120px]" />
               </div>
               <FooterCol
                 title="Shop"
@@ -143,6 +144,7 @@ export function SiteFooter({
                 ]}
               />
               <FooterCol
+                className="col-span-2 nav:col-span-1"
                 title="Support"
                 links={[
                   { label: "Contact Us", href: "/contact" },
@@ -179,9 +181,9 @@ function PatternLayer() {
   );
 }
 
-function FooterCol({ title, links }: { title: string; links: { label: string; href: string }[] }) {
+function FooterCol({ title, links, className }: { title: string; links: { label: string; href: string }[]; className?: string }) {
   return (
-    <nav aria-label={title} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <nav aria-label={title} className={className} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <h3
         style={{
           margin: 0,
@@ -228,15 +230,17 @@ function BottomBar({ bordered = false }: { bordered?: boolean }) {
       <div style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500, color: "rgba(209,213,219,0.7)" }}>
         © 2026 Matessa · matessa.in
       </div>
-      <div style={{ display: "flex", gap: 26 }}>
-        {["Instagram", "Facebook", "YouTube"].map((s) => (
+      <div style={{ display: "flex", gap: 14 }}>
+        {SOCIALS.map((s) => (
           <a
-            key={s}
-            href="#top"
-            className="transition-colors duration-300 hover:!text-orange-hover"
-            style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700, color: "#D1D5DB", textDecoration: "none" }}
+            key={s.label}
+            href={s.href}
+            aria-label={s.label}
+            rel="noopener noreferrer"
+            target="_blank"
+            className="grid h-9 w-9 place-items-center rounded-full text-[#D1D5DB] transition-colors duration-300 hover:bg-white/10 hover:text-orange"
           >
-            {s}
+            <s.Icon size={19} />
           </a>
         ))}
       </div>
