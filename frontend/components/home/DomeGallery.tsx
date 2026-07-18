@@ -157,7 +157,7 @@ export function DomeGallery() {
         className="font-heading"
         style={{
           margin: 0,
-          padding: "clamp(48px, 6vw, 84px) 20px clamp(26px, 4vw, 44px)",
+          padding: "clamp(56px, 7vw, 116px) 20px clamp(26px, 4vw, 44px)",
           fontWeight: 700,
           fontSize: "clamp(32px, 3.8vw, 50px)",
           letterSpacing: "-0.01em",
@@ -192,7 +192,7 @@ export function DomeGallery() {
         <div
           ref={rootRef}
           className={`mtsa-dome${zoom ? " mtsa-dome-open" : ""}`}
-          style={{ position: "relative", height: "clamp(500px, 88svh, 860px)" }}
+          style={{ position: "relative", height: "clamp(500px, 92svh, 960px)" }}
         >
           <div
             style={{

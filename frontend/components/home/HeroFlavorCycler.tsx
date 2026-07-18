@@ -287,9 +287,12 @@ export function HeroFlavorCycler() {
               aria-hidden="true"
               style={{
                 position: "absolute",
-                left: isMobile ? "1%" : ing.left,
-                bottom: isMobile ? "5%" : ing.bottom,
-                width: isMobile ? "clamp(80px, 23vw, 118px)" : ing.width,
+                // Mobile/tablet: anchor to the packet's left edge (packet is centred, so
+                // % from the viewport drifts). right = 50% + packet-half-width + small gap.
+                left: isMobile ? "auto" : ing.left,
+                right: isMobile ? "calc(50% + 118px)" : "auto",
+                bottom: isMobile ? "17%" : ing.bottom,
+                width: isMobile ? "clamp(62px, 17vw, 92px)" : ing.width,
                 pointerEvents: "none",
                 ...ingStyle(i, 0.35),
               }}
@@ -306,13 +309,14 @@ export function HeroFlavorCycler() {
             </div>
           ))}
 
-          {/* floating pouch stack */}
+          {/* floating pouch stack — pushed up a bit on mobile so it crosses the circle */}
           <div
             style={{
               position: "relative",
               height: "clamp(360px, 44vw, 580px)",
               aspectRatio: "0.62",
               animation: "mtsa-float 6.5s ease-in-out infinite",
+              marginBottom: isMobile ? 44 : 0,
               zIndex: 2,
             }}
           >
@@ -336,9 +340,11 @@ export function HeroFlavorCycler() {
               aria-hidden="true"
               style={{
                 position: "absolute",
-                right: isMobile ? "1%" : ing.right,
-                bottom: isMobile ? "9%" : ing.bottom,
-                width: isMobile ? "clamp(64px, 18vw, 100px)" : ing.width,
+                // Mobile/tablet: anchor to the packet's right edge (left = 50% + half + gap).
+                left: isMobile ? "calc(50% + 118px)" : "auto",
+                right: isMobile ? "auto" : ing.right,
+                bottom: isMobile ? "20%" : ing.bottom,
+                width: isMobile ? "clamp(50px, 13vw, 78px)" : ing.width,
                 pointerEvents: "none",
                 zIndex: 3,
                 ...ingStyle(i, 0.55),

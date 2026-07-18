@@ -139,7 +139,7 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
                       top: 0,
                       left: 0,
                       right: 0,
-                      height: "calc(clamp(24px, 2.6vw, 36px) + 320px)",
+                      height: `calc(clamp(24px, 2.6vw, 36px) + ${isMobile ? 356 : 388}px)`,
                       backgroundImage: "url('/brand/leaf-pattern-light.webp')",
                       backgroundSize: "320px",
                       backgroundColor: skin.overlay,
@@ -153,7 +153,7 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
                   <Link
                     href={`/product/${b.slug}`}
                     aria-label={b.name}
-                    style={{ alignSelf: "stretch", position: "relative", height: 320, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 0 8px" }}
+                    style={{ alignSelf: "stretch", position: "relative", height: isMobile ? 356 : 388, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 0 8px" }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img

@@ -74,8 +74,8 @@ export function MateTimeline() {
       <div ref={ref} className="relative mx-auto min-h-[900px] max-w-5xl px-2 nav:px-6">
         {/* center line */}
         <div className="pointer-events-none absolute bottom-24 left-1/2 top-0 z-40 w-1 -translate-x-1/2">
-          <div className="absolute left-0 top-0 -ml-px h-full w-0.5 bg-darkgreen/10" />
-          <motion.div style={{ scaleY: progress, originY: 0 }} className="absolute left-0 top-0 -ml-px h-full w-0.5 bg-darkgreen" />
+          <div className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-darkgreen/10" />
+          <motion.div style={{ scaleY: progress, originY: 0 }} className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-darkgreen" />
           <motion.div style={{ top: logoTop }} className="absolute left-[-20px] z-50 h-10 w-10 nav:left-[-30px] nav:h-16 nav:w-16">
             <motion.div
               className="h-full w-full"
