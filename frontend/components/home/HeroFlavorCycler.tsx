@@ -187,7 +187,9 @@ export function HeroFlavorCycler() {
           flexWrap: "wrap",
           alignItems: "center",
           gap: "clamp(12px, 3vw, 40px)",
-          padding: "clamp(96px, 14vh, 140px) clamp(20px, 4vw, 48px) clamp(36px, 6vh, 70px)",
+          padding: isMobile
+            ? "clamp(84px, 12vh, 120px) clamp(20px, 4vw, 48px) 0"
+            : "clamp(96px, 14vh, 140px) clamp(20px, 4vw, 48px) clamp(36px, 6vh, 70px)",
         }}
       >
         {/* Left: copy (design shows only the H1) */}
@@ -234,22 +236,26 @@ export function HeroFlavorCycler() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            minHeight: isMobile ? 460 : "clamp(440px, 52vw, 660px)",
-            // Mobile: clip the low circle at the stage edges so its head-height top sits
-            // behind the pouch (head out) and its bottom is trimmed cleanly.
+            minHeight: isMobile ? 470 : "clamp(440px, 52vw, 660px)",
+            // Mobile: bleed the stage to the viewport edges (cancel the wrapper's side
+            // padding) and clip the circle at those edges + the marquee below, so the
+            // circle fills the width and reaches the bar with no cream gutters.
+            margin: isMobile ? "0 calc(-1 * clamp(20px, 4vw, 48px))" : undefined,
             overflow: isMobile ? "hidden" : "visible",
           }}
         >
-          {/* mobile color-field circle — sits low so the pouch head rises above it */}
+          {/* mobile color-field circle — top edge just below the pouch head; the width is
+              viewport-relative so it always bleeds off both sides (phone and tablet) and
+              off the bottom to the marquee. */}
           {isMobile && (
             <div
               aria-hidden="true"
               style={{
                 position: "absolute",
                 left: "50%",
-                top: "78%",
-                transform: "translate(-50%, -50%)",
-                width: "min(122vw, 470px)",
+                top: "clamp(88px, 22%, 150px)",
+                transform: "translateX(-50%)",
+                width: "142vw",
                 aspectRatio: "1",
                 borderRadius: "50%",
                 background: FLAVORS[active].circle,
