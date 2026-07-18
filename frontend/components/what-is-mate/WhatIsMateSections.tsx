@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { motion, useScroll, useSpring, useTransform, useReducedMotion } from "framer-motion";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/ui/icons";
+import { StackGallery } from "./StackGallery";
 
 const REVEAL = {
   initial: { opacity: 0, y: 24 },
@@ -22,8 +23,8 @@ export function WhatIsMateIntro() {
     <section className="relative overflow-hidden bg-craemy px-6 py-16 nav:px-20">
       <div
         aria-hidden="true"
-        className="absolute inset-0 opacity-25"
-        style={{ backgroundImage: "url('/wim/leaf-pattern1.webp')", backgroundSize: "800px", mixBlendMode: "multiply" }}
+        className="absolute inset-0 opacity-20"
+        style={{ backgroundImage: "url('/brand/matessa-pattern.webp')", backgroundSize: "460px", mixBlendMode: "multiply" }}
       />
       <div className="relative mx-auto grid max-w-6xl items-center gap-12 nav:grid-cols-2">
         <motion.div {...REVEAL}>
@@ -41,12 +42,8 @@ export function WhatIsMateIntro() {
             alternative to coffee for athletes, artists and health lovers alike.
           </p>
         </motion.div>
-        <motion.div {...REVEAL} className="grid grid-cols-2 gap-4">
-          {["/brand/story-matecup.webp", "/brand/story-masala.webp", "/brand/gal-yani.webp", "/brand/story-branding.webp"].map((src) => (
-            <div key={src} className="overflow-hidden rounded-3xl shadow-lg">
-              <Image src={src} alt="" width={280} height={280} className="aspect-square w-full object-cover" />
-            </div>
-          ))}
+        <motion.div {...REVEAL} className="flex items-center justify-center">
+          <StackGallery />
         </motion.div>
       </div>
     </section>
@@ -60,7 +57,7 @@ const TIMELINE = [
   { year: "1800s", title: "National Icon", event: "Becomes the national drink of Argentina, Uruguay and Paraguay." },
   { year: "1900s", title: "Expansion", event: "Mate culture crosses into Chile, Brazil and the Middle East." },
   { year: "2000s", title: "Global Reach", event: "Exports surge worldwide; mate becomes a hit in Europe & the USA." },
-  { year: "2025", title: "Modern Fusion", event: "New blends like Masala & Lemon gain popularity in India and beyond." },
+  { year: "2026", title: "Modern Fusion", event: "New blends like Masala & Lemon gain popularity in India and beyond." },
 ];
 
 export function MateTimeline() {
@@ -68,6 +65,8 @@ export function MateTimeline() {
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start center", "end center"] });
   const progress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
   const logoTop = useTransform(progress, [0, 1], ["0%", "100%"]);
+  // Logo tints from green to orange as it reaches the end of the line.
+  const logoColor = useTransform(progress, [0.82, 1], ["#3E5F2D", "#F26323"]);
 
   return (
     <section className="relative overflow-hidden bg-white py-20">
@@ -78,9 +77,10 @@ export function MateTimeline() {
           <div className="absolute left-0 top-0 -ml-px h-full w-0.5 bg-darkgreen/10" />
           <motion.div style={{ scaleY: progress, originY: 0 }} className="absolute left-0 top-0 -ml-px h-full w-0.5 bg-darkgreen" />
           <motion.div style={{ top: logoTop }} className="absolute left-[-20px] z-50 h-10 w-10 nav:left-[-30px] nav:h-16 nav:w-16">
-            <div
-              className="h-full w-full bg-green"
+            <motion.div
+              className="h-full w-full"
               style={{
+                backgroundColor: logoColor,
                 WebkitMaskImage: "url('/wim/full.logo.webp')",
                 maskImage: "url('/wim/full.logo.webp')",
                 WebkitMaskSize: "contain",
@@ -99,6 +99,11 @@ export function MateTimeline() {
             const even = i % 2 === 0;
             return (
               <div key={item.year} className={`relative mb-20 flex w-full items-center justify-between ${even ? "flex-row-reverse" : ""}`}>
+                {/* year marker dot, centered on the line */}
+                <span
+                  aria-hidden="true"
+                  className="absolute left-1/2 top-1/2 z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#F9F7F3] bg-darkgreen shadow-[0_0_0_3px_rgba(47,59,40,0.10)]"
+                />
                 <motion.div
                   initial={{ opacity: 0, x: even ? -20 : 20 }}
                   whileInView={{ opacity: 1, x: 0 }}
@@ -145,9 +150,7 @@ export function IndianMateStory() {
             A harmonious blend where the earthy richness of <span className="font-semibold text-darkgreen">Yerba Mate</span>{" "}
             meets the warming embrace of <span className="font-semibold text-orange">Masala spices</span>.
           </p>
-          <p className="border-t border-gray-200 pt-4 font-body text-sm italic text-darkgreen opacity-90 md:text-lg">
-            &quot;Balancing vitality with warmth. A global friendship in every sip.&quot;
-          </p>
+          
         </motion.div>
       </div>
     </section>

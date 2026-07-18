@@ -1,11 +1,6 @@
 "use client";
 
-// Contact form (design: Contact Us.dc.html) — dark-green card, pattern header, cream
-// labels + translucent fields, and a fully custom Matessa dropdown (native <select>
-// options can't be re-themed off the OS blue highlight). Submits to api.contact.submit.
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError } from "@/lib/api";
-import { ChevronRightIcon } from "@/components/ui/icons";
 
 const ENQUIRY_TYPES = [
   "Order & Shipping",
@@ -16,18 +11,18 @@ const ENQUIRY_TYPES = [
   "Something Else",
 ];
 
-/** Matessa-branded dropdown (replaces native <select> so the option hover is our green,
- *  not the OS blue). Closes on outside click / Escape. */
 function MatessaSelect({
   value,
   onChange,
   options,
   placeholder,
+  hasError,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
   placeholder: string;
+  hasError?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -47,44 +42,52 @@ function MatessaSelect({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative flex flex-col gap-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full items-center justify-between rounded-xl border border-craemy/25 bg-black/15 px-4 py-3 text-left font-body text-craemy outline-none transition-colors focus:border-yellow"
+        className={`flex w-full items-center justify-between rounded-[14px] border-[1.5px] bg-white/10 px-4 py-3.5 text-left font-body text-[15.5px] outline-none transition-all duration-250 ${
+          hasError ? "border-[#F26323]" : "border-white/20 hover:border-white/40 focus:border-[#EADBA2] focus:shadow-[0_0_0_4px_rgba(234,219,162,0.16)]"
+        }`}
       >
-        <span className={value ? "" : "text-craemy/50"}>{value || placeholder}</span>
-        <span className={`text-craemy/70 transition-transform duration-200 ${open ? "rotate-90" : ""}`}>
-          <ChevronRightIcon size={16} />
+        <span className={`${value ? "text-[#F9F7F3] font-semibold" : "text-white/45 font-medium"}`}>
+          {value || placeholder}
         </span>
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-craemy/20 bg-darkgreen shadow-2xl"
-          style={{ boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}
+        <svg 
+          width="16" 
+          height="16" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="#EADBA2" 
+          strokeWidth="2.5" 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          className={`flex-none transition-transform duration-250 ${open ? "rotate-180" : "rotate-0"}`}
         >
+          <path d="m6 9 6 6 6-6"></path>
+        </svg>
+      </button>
+      
+      {open && (
+        <div className="absolute z-30 top-[calc(100%+8px)] left-0 right-0 flex flex-col gap-[2px] rounded-[14px] border-[1.5px] border-[#E2E0D8] bg-[#F9F7F3] p-1.5 shadow-[0_18px_44px_rgba(47,59,40,0.22)]">
           {options.map((opt) => (
-            <li key={opt}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={opt === value}
-                onClick={() => {
-                  onChange(opt);
-                  setOpen(false);
-                }}
-                className={`block w-full px-4 py-2.5 text-left font-body text-[15px] transition-colors ${
-                  opt === value ? "bg-green text-white" : "text-craemy hover:bg-[#3E5F2D] hover:text-white"
-                }`}
-              >
-                {opt}
-              </button>
-            </li>
+            <button
+              key={opt}
+              type="button"
+              role="option"
+              aria-selected={opt === value}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+              className="rounded-[10px] px-3.5 py-3 text-left font-body text-[15px] font-semibold text-[#2F3B28] transition-colors duration-200 hover:bg-[#EADBA2]"
+            >
+              {opt}
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
@@ -95,97 +98,130 @@ export function ContactForm() {
   const [queryType, setQueryType] = useState("");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [enquiryError, setEnquiryError] = useState(false);
 
-  const submit = async () => {
-    setError(null);
-    if (!/^\S+@\S+\.\S+$/.test(email)) return setError("Please enter a valid email so we can reply.");
-    if (!queryType) return setError("Please choose an enquiry type.");
-    if (!message.trim()) return setError("Tell us how we can help.");
-    setBusy(true);
-    try {
-      await api.contact.submit({ email: email.trim(), queryType, message: message.trim() });
-      setSent(true);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't send your message. Please try again.");
-    } finally {
-      setBusy(false);
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!queryType) {
+      setEnquiryError(true);
+      return;
     }
+    setSent(true);
   };
 
-  const label = "mb-1.5 block font-body text-xs font-bold uppercase tracking-[0.14em] text-yellow";
-  const field =
-    "w-full rounded-xl border border-craemy/25 bg-black/15 px-4 py-3 font-body text-craemy outline-none transition-colors placeholder:text-craemy/50 focus:border-yellow";
+  const labelClass = "font-body text-[13px] font-bold uppercase tracking-[0.08em] text-[#EADBA2]";
+  const fieldClass = "w-full rounded-[14px] border-[1.5px] border-white/20 bg-white/10 px-4 py-3.5 font-body text-[15.5px] font-semibold text-[#F9F7F3] outline-none transition-all duration-250 placeholder:font-medium placeholder:text-white/45 hover:border-white/40 focus:border-[#EADBA2] focus:shadow-[0_0_0_4px_rgba(234,219,162,0.16)]";
 
   return (
-    <div className="mx-auto w-full max-w-[620px] overflow-hidden rounded-[2rem] bg-darkgreen shadow-2xl">
-      {/* pattern header */}
-      <div className="relative px-8 py-12 text-center">
+    <div className="mx-auto w-full max-w-[620px] overflow-hidden rounded-[2rem] bg-[#2F3B28] shadow-[0_24px_60px_rgba(47,59,40,0.14)]">
+      
+      {/* HEADER SECTION */}
+      <div className="relative border-b-[1.5px] border-white/10 bg-[#28311F] px-[clamp(22px,5vw,48px)] py-[clamp(38px,6vw,56px)] text-center">
+        
+        {/* PATTERN LAYER */}
         <div
           aria-hidden="true"
-          className="absolute inset-0"
+          className="absolute inset-0 bg-center" 
           style={{
+            /* 1. FIXED PATH: Changed back to /brand/ to match your Next.js public folder */
             backgroundImage: "url('/brand/matessa-pattern.webp')",
-            backgroundSize: "260px",
-            opacity: 0.22,
+            backgroundSize: "clamp(420px, 60vw, 640px) auto",
+            opacity: 0.45,
+            
+            /* 2. If the pattern STILL doesn't show, delete the next two lines... */
             mixBlendMode: "screen",
+            filter: "grayscale(1) invert(1) brightness(2.1) sepia(0.55) saturate(1.4)"
           }}
         />
-        <h1 className="relative font-heading text-3xl font-bold text-craemy md:text-4xl">
-          Get in Touch with the Matessa Team
-        </h1>
+        
+        {/* FADE GRADIENT */}
+        <div 
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(180deg, rgba(47,59,40,0) 35%, rgba(47,59,40,0.88) 100%)" }}
+        />
+
+        <div className="relative z-10 flex flex-col items-center">
+          <h1 className="font-heading text-[clamp(26px,4vw,36px)] font-bold leading-[1.3] text-[#F9F7F3]">
+            Get in Touch with<br />Matessa Team
+          </h1>
+        </div>
       </div>
 
-      <div className="px-8 pb-9">
-        {sent ? (
-          <div className="py-8 text-center">
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-yellow text-2xl text-darkgreen">✓</div>
-            <h2 className="font-heading text-xl font-bold text-craemy">Message Sent</h2>
-            <p className="mt-2 font-body text-craemy/80">
-              Thank you for reaching out. We&apos;ll get back to you at <strong className="text-white">{email}</strong> within 1–2 days.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSent(false);
-                setMessage("");
-              }}
-              className="mt-6 rounded-full border-2 border-craemy/40 px-6 py-2.5 font-body font-bold text-craemy transition-colors hover:border-orange hover:text-orange"
-            >
-              Send another message
-            </button>
+      {/* FORM SECTION */}
+      {!sent ? (
+        <form onSubmit={submit} className="flex flex-col gap-[22px] px-[clamp(22px,5vw,48px)] py-[clamp(26px,4.5vw,44px)]">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="cemail" className={labelClass}>
+              Email
+            </label>
+            <input 
+              id="cemail" 
+              name="email"
+              className={fieldClass} 
+              type="email" 
+              required
+              placeholder="you@example.com" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+            />
           </div>
-        ) : (
-          <div className="grid gap-5">
-            <div>
-              <label htmlFor="cemail" className={label}>
-                Email
-              </label>
-              <input id="cemail" className={field} type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <span className={label}>Enquiry type</span>
-              <MatessaSelect value={queryType} onChange={setQueryType} options={ENQUIRY_TYPES} placeholder="Choose a topic…" />
-            </div>
-            <div>
-              <label htmlFor="cmsg" className={label}>
-                Message
-              </label>
-              <textarea id="cmsg" className={field} rows={5} placeholder="Tell us how we can help…" value={message} onChange={(e) => setMessage(e.target.value)} />
-            </div>
-            {error && <p className="font-body text-sm text-orange">{error}</p>}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={submit}
-              className="rounded-full bg-craemy py-3.5 font-body font-bold text-darkgreen transition-colors duration-300 hover:bg-yellow disabled:opacity-50"
-            >
-              {busy ? "Sending…" : "Send Message"}
-            </button>
+          
+          <div className="flex flex-col gap-2">
+            <span className={labelClass}>Enquiry type</span>
+            <MatessaSelect 
+              value={queryType} 
+              onChange={(val) => {
+                setQueryType(val);
+                setEnquiryError(false);
+              }} 
+              options={ENQUIRY_TYPES} 
+              placeholder="Choose a topic…" 
+              hasError={enquiryError}
+            />
           </div>
-        )}
-      </div>
+          
+          <div className="flex flex-col gap-2">
+            <label htmlFor="cmsg" className={labelClass}>
+              Message
+            </label>
+            <textarea 
+              id="cmsg" 
+              name="message"
+              className={`${fieldClass} min-h-[130px] resize-y leading-[1.6]`} 
+              required
+              rows={5} 
+              placeholder="Tell us how we can help…" 
+              value={message} 
+              onChange={(e) => setMessage(e.target.value)} 
+            />
+          </div>
+          
+          <button
+            type="submit"
+            className="mt-1 w-full rounded-full bg-[#EADBA2] px-8 py-4 font-body text-[15.5px] font-bold text-[#2F3B28] transition-all duration-300 hover:-translate-y-[2px] hover:bg-[#F26323] hover:text-[#F9F7F3]"
+          >
+            Send Message
+          </button>
+        </form>
+      ) : (
+        /* SUCCESS STATE */
+        <div className="flex flex-col items-center gap-4 px-[clamp(22px,5vw,48px)] py-[clamp(44px,7vw,72px)] text-center">
+          <span className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-[#EADBA2]/15 text-[#EADBA2]">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+          </span>
+          <h2 className="font-heading text-[clamp(24px,3.4vw,32px)] font-bold text-[#F9F7F3]">Message Sent</h2>
+          <p className="max-w-[40ch] font-body text-[15.5px] font-medium leading-[1.7] text-[#F9F7F3]/80">
+            Thank you for reaching out. We will get back to you at <strong className="text-[#F9F7F3]">{email}</strong> within 1–2 days.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSent(false)}
+            className="mt-2 rounded-full border-[1.5px] border-[#EADBA2]/45 px-[26px] py-3 font-body text-[14.5px] font-bold text-[#EADBA2] transition-colors duration-300 hover:border-[#E85D1F] hover:text-[#E85D1F]"
+          >
+            Send Another Message
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -68,7 +68,7 @@ export default function AboutPage() {
                   alt={c.alt}
                   width={520}
                   height={420}
-                  className="h-[280px] w-full rounded-[2rem] object-cover shadow-lg nav:h-[360px]"
+                  className="h-[400px] w-full rounded-[2rem] object-cover shadow-lg nav:h-[530px]"
                 />
               </Reveal>
               <Reveal delay={120} className="flex-1">

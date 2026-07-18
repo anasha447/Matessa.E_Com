@@ -29,7 +29,6 @@ export default function WhatIsMatePage() {
         <WorldConsumptionMap />
         <IndianMateStory />
         <HowToPrepare />
-        <QuoteParallax />
       </main>
       <SiteFooter variant="full" />
     </>
