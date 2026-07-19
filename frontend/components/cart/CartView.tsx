@@ -12,7 +12,7 @@ import { PillLink } from "@/components/ui/brand";
 const fmt = (n: number | null | undefined) => (typeof n === "number" ? formatMoney(n) : "—");
 
 export function CartView() {
-  const { cart, images, count, subtotal, setQty, removeItem } = useCart();
+  const { cart, images, sizes, count, subtotal, setQty, removeItem } = useCart();
   const items = cart?.items ?? [];
 
   if (items.length === 0) {
@@ -44,7 +44,12 @@ export function CartView() {
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-heading font-bold text-darkgreen">{item.productName}</p>
+                  <div className="min-w-0">
+                    <p className="font-heading font-bold text-darkgreen">{item.productName}</p>
+                    {sizes[item.productVariantId] && (
+                      <p className="font-body text-xs text-gray-500">{sizes[item.productVariantId]}</p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     aria-label="Remove"

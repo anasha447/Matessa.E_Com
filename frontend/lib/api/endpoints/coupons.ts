@@ -10,7 +10,7 @@ import type {
 
 export const couponsApi = {
   validate: (body: CouponValidationRequest) =>
-    http.post<CouponValidationResponse>('/api/coupons/validate', body),
+    http.post<CouponValidationResponse>('/api/coupons/validate', body, { auth: false }),
 
   // ---- staff ----
   list: (params?: PageParams) =>

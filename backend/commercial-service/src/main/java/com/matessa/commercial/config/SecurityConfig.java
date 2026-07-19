@@ -44,8 +44,9 @@ public class SecurityConfig {
                         // any logged-in customer may write/edit/delete their own review
                         .requestMatchers(HttpMethod.POST, "/api/products/*/reviews").authenticated()
                         .requestMatchers("/api/reviews/**").authenticated()
-                        // coupon validation (checkout preview) is open to any authenticated user
-                        .requestMatchers(HttpMethod.POST, "/api/coupons/validate").authenticated()
+                        // coupon validation is a stateless checkout preview (never redeems the
+                        // code) — public so guests get live discount calculation too
+                        .requestMatchers(HttpMethod.POST, "/api/coupons/validate").permitAll()
                         // public storefront submissions: contact form + newsletter signup (guests)
                         .requestMatchers(HttpMethod.POST, "/api/contact", "/api/subscribers").permitAll()
                         // everything else — catalog writes, contact/subscriber reads, coupon CRUD — staff only

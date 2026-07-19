@@ -12,7 +12,7 @@ export default function CartPage() {
       <main className="min-h-[70svh]">
         <CartView />
       </main>
-      <SiteFooter variant="minimal" />
+      <SiteFooter variant="full" />
     </>
   );
 }

@@ -21,7 +21,7 @@ function variantLabel(sku: string | null | undefined): string | null {
 }
 
 export function CartDrawer() {
-  const { cart, images, count, subtotal, isOpen, close, setQty, removeItem } = useCart();
+  const { cart, images, sizes, count, subtotal, isOpen, close, setQty, removeItem } = useCart();
   const items = cart?.items ?? [];
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function CartDrawer() {
         onClick={close}
       />
       <aside
-        className={`fixed inset-y-0 right-0 z-[99] flex w-full flex-col bg-white shadow-2xl transition-transform duration-300 nav:w-[400px] ${
+        className={`fixed inset-y-0 right-0 z-[99] flex w-[min(84vw,340px)] flex-col bg-white shadow-2xl transition-transform duration-300 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-label="Shopping cart"
@@ -72,7 +72,7 @@ export function CartDrawer() {
           ) : (
             <ul className="space-y-4">
               {items.map((item) => {
-                const label = variantLabel(item.sku);
+                const label = sizes[item.productVariantId] ?? variantLabel(item.sku);
                 return (
                   <li key={item.id} className="flex gap-3">
                     <img

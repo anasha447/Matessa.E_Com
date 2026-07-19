@@ -47,7 +47,51 @@ export function CheckoutView({
   const shippingMethod = "Standard";
   const [payment, setPayment] = useState<PaymentMethod>("COD");
 
+  // Coupon: a stateless preview (api.coupons.validate) computes the discount; the code
+  // is passed to the order so the server re-validates and redeems it authoritatively.
+  const [coupon, setCoupon] = useState(initialCoupon ?? "");
+  const [applied, setApplied] = useState<{ code: string; discount: number } | null>(null);
+  const [couponMsg, setCouponMsg] = useState<string | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+
   const items = cart?.items ?? [];
+  const discount = applied?.discount ?? 0;
+  const total = Math.max(0, subtotal - discount);
+
+  const applyCoupon = async () => {
+    const code = coupon.trim();
+    if (!code) return;
+    setCouponBusy(true);
+    setCouponMsg(null);
+    try {
+      const res = await api.coupons.validate({ code, subtotal });
+      if (res.valid) {
+        setApplied({ code: res.code, discount: res.discountAmount });
+        setCouponMsg(`Applied — you saved ${formatMoney(res.discountAmount)}.`);
+      } else {
+        setApplied(null);
+        setCouponMsg(res.message || "That coupon isn't valid for this order.");
+      }
+    } catch (e) {
+      // If the live preview isn't available to this user, still accept the code — the
+      // server re-validates and applies it authoritatively at checkout.
+      if (e instanceof ApiError && e.isUnauthorized) {
+        setApplied({ code, discount: 0 });
+        setCouponMsg("Code added — the discount is applied at checkout.");
+      } else {
+        setApplied(null);
+        setCouponMsg("Couldn't check that coupon — please try again.");
+      }
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setApplied(null);
+    setCoupon("");
+    setCouponMsg(null);
+  };
 
   const placeOrder = async () => {
     setError(null);
@@ -83,13 +127,13 @@ export function CheckoutView({
               items: items.map((i) => ({ productVariantId: i.productVariantId, quantity: i.quantity })),
               shippingAddress,
               paymentMethod: payment,
-              couponCode: initialCoupon || null,
+              couponCode: applied?.code ?? null,
               shippingMethod,
             },
             idemKey,
           )
         : await api.orders.checkout(
-            { shippingAddress, paymentMethod: payment, couponCode: initialCoupon || null, shippingMethod },
+            { shippingAddress, paymentMethod: payment, couponCode: applied?.code ?? null, shippingMethod },
             idemKey,
           );
       setPlaced(order);
@@ -221,9 +265,59 @@ export function CheckoutView({
               </li>
             ))}
           </ul>
-          <div className="flex items-center justify-between py-4">
-            <span className="font-body text-gray-600">Total</span>
-            <span className="font-heading text-2xl font-bold text-green">{formatMoney(subtotal)}</span>
+
+          {/* Coupon */}
+          <div className="border-b border-gray-100 py-4">
+            {applied ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-body text-sm font-bold text-green">
+                  {applied.code} applied
+                </span>
+                <button type="button" onClick={removeCoupon} className="font-body text-sm text-gray-400 transition-colors hover:text-orange">
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  value={coupon}
+                  onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), applyCoupon())}
+                  placeholder="Coupon code"
+                  aria-label="Coupon code"
+                  className="min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-3 py-2.5 font-body text-sm uppercase outline-none focus:border-green"
+                />
+                <button
+                  type="button"
+                  onClick={applyCoupon}
+                  disabled={couponBusy || !coupon.trim()}
+                  className="rounded-xl bg-darkgreen px-4 py-2.5 font-body text-sm font-bold text-craemy transition-colors hover:bg-green disabled:opacity-40"
+                >
+                  {couponBusy ? "…" : "Apply"}
+                </button>
+              </div>
+            )}
+            {couponMsg && (
+              <p className={`mt-2 font-body text-sm ${applied ? "text-green" : "text-orange"}`}>{couponMsg}</p>
+            )}
+          </div>
+
+          {/* Totals */}
+          <div className="space-y-1.5 pt-4 font-body text-sm">
+            <div className="flex justify-between text-gray-600">
+              <span>Subtotal</span>
+              <span className="font-semibold text-darkgreen">{formatMoney(subtotal)}</span>
+            </div>
+            {discount > 0 && (
+              <div className="flex justify-between text-green">
+                <span>Discount</span>
+                <span className="font-semibold">− {formatMoney(discount)}</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 flex items-center justify-between border-t border-gray-100 py-4">
+            <span className="font-body font-bold text-gray-700">Total</span>
+            <span className="font-heading text-2xl font-bold text-green">{formatMoney(total)}</span>
           </div>
           {error && <p className="mb-3 font-body text-sm text-orange">{error}</p>}
           <button

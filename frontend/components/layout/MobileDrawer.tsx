@@ -14,13 +14,11 @@ export interface DrawerUser {
   staff: boolean;
 }
 
-// Storefront nav (DESIGN-SYSTEM.md §4): the header items + utility links.
+// Storefront nav (DESIGN-SYSTEM.md §4): the header items + track order.
 const DRAWER_NAV = [
   { label: "Home", href: "/" },
   ...NAV_ITEMS,
   { label: "Track order", href: "/track" },
-  { label: "Wishlist", href: "/wishlist" },
-  { label: "Search", href: "/search" },
 ];
 
 /** Left slide-in mobile menu (no bottom tab bar — DESIGN-SYSTEM.md §4).

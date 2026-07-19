@@ -47,6 +47,8 @@ const EMPTY_GUEST_CART: CartResponse = { cartId: null, userId: null, items: [], 
 interface CartContextValue {
   cart: CartResponse | null;
   images: Record<number, string>;
+  /** weight/size label per productVariantId, e.g. "250g" (enriched from the variant). */
+  sizes: Record<number, string>;
   count: number;
   subtotal: number;
   isOpen: boolean;
@@ -72,17 +74,26 @@ export function useCart(): CartContextValue {
 export function CartProvider({ children, authed }: { children: ReactNode; authed: boolean }) {
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [images, setImages] = useState<Record<number, string>>({});
+  const [sizes, setSizes] = useState<Record<number, string>>({});
   const [isOpen, setIsOpen] = useState(false);
   const imgCache = useRef<Map<number, string>>(new Map());
+  const sizeCache = useRef<Map<number, string>>(new Map());
 
-  // Resolve a primary image per cart line (backend cart lines carry none). Cached.
+  // Resolve a primary image + the weight/size label per cart line (backend cart lines
+  // carry neither). Cached by productVariantId.
   const enrich = useCallback(async (c: CartResponse) => {
     const missing = c.items.filter((i) => !imgCache.current.has(i.productVariantId));
     await Promise.all(
       missing.map(async (i) => {
         try {
           const ps = await api.variants.getPriceStock(i.productVariantId);
-          const imgs = await api.images.listForProduct(ps.productId);
+          const [imgs, variants] = await Promise.all([
+            api.images.listForProduct(ps.productId),
+            // the price/stock endpoint has no size; the variant list carries the label
+            api.variants.listForProduct(ps.productId).catch(() => []),
+          ]);
+          const size = variants.find((v) => v.id === i.productVariantId)?.size;
+          if (size) sizeCache.current.set(i.productVariantId, size);
           const primary = imgs.find((x) => x.primary) ?? imgs[0];
           imgCache.current.set(i.productVariantId, primary?.url ?? CART_PLACEHOLDER);
         } catch {
@@ -90,7 +101,10 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
         }
       }),
     );
-    if (missing.length > 0) setImages(Object.fromEntries(imgCache.current));
+    if (missing.length > 0) {
+      setImages(Object.fromEntries(imgCache.current));
+      setSizes(Object.fromEntries(sizeCache.current));
+    }
   }, []);
 
   const apply = useCallback(
@@ -101,18 +115,24 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
     [enrich],
   );
 
-  // Guest cart: re-price the local lines (or show empty).
+  // Guest cart: re-price the local lines (or show empty). Retries a few times so a
+  // transient gateway hiccup (order-service GC pause → 503) doesn't drop the just-added
+  // item, and on persistent failure keeps whatever is already shown rather than wiping it.
   const priceGuest = useCallback(async () => {
     const lines = readGuest();
     if (lines.length === 0) {
       setCart(EMPTY_GUEST_CART);
       return;
     }
-    try {
-      await apply(await api.cart.price(lines));
-    } catch {
-      setCart(EMPTY_GUEST_CART);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await apply(await api.cart.price(lines));
+        return;
+      } catch {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      }
     }
+    setCart((prev) => (prev && prev.items.length > 0 ? prev : EMPTY_GUEST_CART));
   }, [apply]);
 
   const refresh = useCallback(async () => {
@@ -220,6 +240,7 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
       value={{
         cart,
         images,
+        sizes,
         count,
         subtotal,
         isOpen,

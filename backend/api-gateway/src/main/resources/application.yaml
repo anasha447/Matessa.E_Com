@@ -125,15 +125,17 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
       orderService:
         sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 10s
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 4s
         permitted-number-of-calls-in-half-open-state: 3
   timelimiter:
     instances:
       userService:
-        timeout-duration: 5s
+        timeout-duration: 12s
       orderService:
-        timeout-duration: 5s
+        # Tolerant of JDK-25 GC pauses on the shared dev VM so transient pauses don't
+        # trip the breaker (was 5s → frequent 503s on /cart/price under load).
+        timeout-duration: 12s
 
 management:
   endpoints:

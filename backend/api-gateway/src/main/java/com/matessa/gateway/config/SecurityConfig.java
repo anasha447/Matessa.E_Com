@@ -46,8 +46,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/products/**", "/api/variants/**",
                                 "/api/reviews/**", "/api/discounts/**").permitAll() // public catalog reads
                         .requestMatchers(HttpMethod.GET, "/media/**").permitAll() // public product images (WebP)
-                        // guest shopping: price a cart, check out, and track without an account
-                        .requestMatchers(HttpMethod.POST, "/api/cart/price", "/api/orders/guest").permitAll()
+                        // guest shopping: price a cart, preview a coupon, check out, and track without an account
+                        .requestMatchers(HttpMethod.POST, "/api/cart/price", "/api/coupons/validate", "/api/orders/guest").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/orders/track").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/error", "/fallback/**").permitAll() // surface real errors / fallbacks, not a masked 401
