@@ -1,7 +1,7 @@
 // Server-safe admin UI primitives (carried over from ad-admin-ui.jsx, minus the
 // count-up/tween animations so they render on the server). Charts that need pointer
 // interaction (TrendChart) live in their own client component.
-import { formatMoney } from "@/lib/utils/money";
+import { formatMoney, formatMoneyShort } from "@/lib/utils/money";
 
 const STATUS_CLASS: Record<string, string> = {
   // OrderStatus
@@ -202,6 +202,130 @@ export function Donut({
             {s.label} <b className="mono" style={{ fontSize: 11.5, color: "var(--text-primary)" }}>{s.value.toLocaleString()}</b>
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Semicircular gauge (0..max). Caller supplies the display string + accent color;
+ *  used for fulfilment rate, dispatch SLA, and month-over-month growth. */
+export function Gauge({
+  value,
+  max = 1,
+  display,
+  label,
+  color = "var(--accent)",
+}: {
+  value: number;
+  max?: number;
+  display: string;
+  label: string;
+  color?: string;
+}) {
+  const frac = Math.max(0, Math.min(1, max ? value / max : 0));
+  const CX = 80;
+  const CY = 82;
+  const R = 62;
+  // SVG y grows downward, so the top semicircle runs 180° → 360° (sweep-flag 1).
+  const pt = (deg: number): [number, number] => {
+    const r = (deg * Math.PI) / 180;
+    return [CX + R * Math.cos(r), CY + R * Math.sin(r)];
+  };
+  const [sx, sy] = pt(180);
+  const [tx, ty] = pt(360);
+  const [vx, vy] = pt(180 + 180 * frac);
+  return (
+    <div className="gauge">
+      <svg viewBox="0 0 160 104" role="img" aria-label={`${label}: ${display}`}>
+        <path d={`M ${sx} ${sy} A ${R} ${R} 0 0 1 ${tx} ${ty}`} fill="none" stroke="var(--bg-raised)" strokeWidth="13" strokeLinecap="round" />
+        <path d={`M ${sx} ${sy} A ${R} ${R} 0 0 1 ${vx} ${vy}`} fill="none" stroke={color} strokeWidth="13" strokeLinecap="round" />
+        <text x={CX} y="72" textAnchor="middle" fontSize="27" fontWeight="700" fontFamily="var(--font-action)" fill="currentColor" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {display}
+        </text>
+      </svg>
+      <div className="gauge-label">{label}</div>
+    </div>
+  );
+}
+
+/** Full pie chart with a percentage legend. */
+export function Pie({ segments, size = 156 }: { segments: DonutSegment[]; size?: number }) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  const CX = 80;
+  const CY = 80;
+  const R = 72;
+  const pt = (frac: number): [number, number] => {
+    const a = frac * 2 * Math.PI - Math.PI / 2; // start at 12 o'clock
+    return [CX + R * Math.cos(a), CY + R * Math.sin(a)];
+  };
+  const visible = segments.filter((s) => s.value > 0);
+  // Cumulative offset per slice without mutating an outer accumulator during render.
+  const wedges = visible.map((s, i) => {
+    const frac = s.value / total;
+    const start = visible.slice(0, i).reduce((a, x) => a + x.value / total, 0);
+    const end = start + frac;
+    const [x1, y1] = pt(start);
+    const [x2, y2] = pt(end);
+    const large = frac > 0.5 ? 1 : 0;
+    const d =
+      frac >= 0.9999
+        ? `M ${CX} ${CY - R} A ${R} ${R} 0 1 1 ${CX - 0.01} ${CY - R} Z`
+        : `M ${CX} ${CY} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`;
+    return { seg: s, d, pct: frac * 100 };
+  });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+      <svg width={size} height={size} viewBox="0 0 160 160" role="img" aria-label="Pie chart">
+        {wedges.map(({ seg: s, d }) => (
+          <path key={s.label} d={d} fill={s.color} stroke="var(--bg-surface)" strokeWidth="1.5" />
+        ))}
+      </svg>
+      <div className="legend" style={{ flexDirection: "column", gap: 8 }}>
+        {wedges.map(({ seg: s, pct }) => (
+          <span className="li" key={s.label}>
+            <span className="sw" style={{ background: s.color }} />
+            {s.label}{" "}
+            <b className="mono" style={{ fontSize: 11.5, color: "var(--text-primary)" }}>{pct.toFixed(0)}%</b>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export interface HeatCell {
+  label: string;
+  value: number;
+}
+
+/** Sequential heat-grid (green scale). Used for 12-month revenue intensity. */
+export function Heatmap({ cells, money }: { cells: HeatCell[]; money?: boolean }) {
+  const max = Math.max(...cells.map((c) => c.value), 1);
+  const min = Math.min(...cells.map((c) => c.value), 0);
+  return (
+    <div>
+      <div className="heatgrid">
+        {cells.map((c, i) => {
+          const t = max > min ? (c.value - min) / (max - min) : 0;
+          const alpha = 0.1 + 0.85 * t; // light tint → deep green
+          const hot = t > 0.6;
+          return (
+            <div
+              key={`${c.label}-${i}`}
+              className="heatcell"
+              style={{ background: `rgba(62, 95, 45, ${alpha.toFixed(3)})`, color: hot ? "var(--on-accent)" : "var(--text-primary)" }}
+              title={`${c.label}: ${money ? formatMoney(c.value) : c.value.toLocaleString()}`}
+            >
+              <span className="hc-lbl">{c.label}</span>
+              <span className="hc-val">{money ? formatMoneyShort(c.value) : c.value.toLocaleString()}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="heat-scale" aria-hidden="true">
+        <span>Low</span>
+        <span className="heat-bar" />
+        <span>High</span>
       </div>
     </div>
   );

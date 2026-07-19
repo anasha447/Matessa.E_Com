@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import "./admin.css";
-import { Sidebar } from "@/components/admin/Sidebar";
-import { AdminTopbar } from "@/components/admin/Topbar";
+import { AdminShell } from "@/components/admin/AdminShell";
 import { getCurrentUser } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
 
 /** Admin console shell. Guards the whole /admin tree: signed-out → login,
- *  customers → storefront. MANAGER sees Operate + Sell; ADMIN also sees People. */
+ *  customers → storefront. MANAGER sees Operate + Sell; ADMIN also sees People.
+ *  Layout chrome (collapsible rail + mobile drawer) lives in the AdminShell client. */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/admin");
@@ -18,13 +18,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="admin">
-      <div className="adm-shell">
-        <Sidebar isAdmin={isAdmin} />
-        <div className="adm-main">
-          <AdminTopbar firstName={user.firstName} lastName={user.lastName} isAdmin={isAdmin} />
-          {children}
-        </div>
-      </div>
+      <AdminShell isAdmin={isAdmin} firstName={user.firstName} lastName={user.lastName}>
+        {children}
+      </AdminShell>
     </div>
   );
 }

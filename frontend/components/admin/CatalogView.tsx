@@ -34,7 +34,6 @@ export function CatalogView({ data }: { data: AdminCatalog }) {
     <div className="adm-content">
       <div className="page-head">
         <div className="ttl">
-          <h2>Catalog</h2>
           <p>
             {data.products.filter((p) => p.active).length} active products across{" "}
             {data.categoryTree.length} categories.

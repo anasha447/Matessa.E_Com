@@ -40,12 +40,18 @@
   --shadow-overlay: 0 12px 32px rgba(20,23,28,.18);
 
   --sidebar-w: 232px;
+  --sidebar-cw: 72px;
 }
 
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* IMPORTANT: every rule here is scoped under .admin. This stylesheet is imported by
+   the admin layout, but Next keeps loaded stylesheets in the document after a soft
+   navigation — so an unscoped reset (e.g. bare `* { margin:0 }`, `button {…}`,
+   `img {…}`) would leak onto the storefront after you visit /admin and break the
+   login/home layout on sign-out. Keep the .admin prefix on all selectors. */
+.admin, .admin *, .admin *::before, .admin *::after { margin: 0; padding: 0; box-sizing: border-box; }
 .admin {
+  -webkit-text-size-adjust: 100%;
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.55;
@@ -53,65 +59,124 @@ html { -webkit-text-size-adjust: 100%; }
   background: var(--bg-page);
   min-height: 100vh;
 }
-img { display: block; max-width: 100%; }
-a { color: var(--cool); text-decoration: none; }
-button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
-:is(button, a, input, select):focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; border-radius: var(--radius); }
+.admin img { display: block; max-width: 100%; }
+.admin a { color: var(--cool); text-decoration: none; }
+.admin button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+.admin :is(button, a, input, select):focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; border-radius: var(--radius); }
 
-.display { font-family: var(--font-display); text-transform: uppercase; font-weight: 400; line-height: 1.1; letter-spacing: .02em; }
-.mono { font-family: var(--font-mono); }
+.admin .display { font-family: var(--font-display); text-transform: uppercase; font-weight: 400; line-height: 1.1; letter-spacing: .02em; }
+.admin .mono { font-family: var(--font-mono); }
 
 /* ============ ADMIN SHELL ============ */
+/* NB: no transition on grid-template-columns — Chromium won't apply a track size
+   defined with var() while it's transitioning, which leaves the rail stuck open.
+   The collapse snaps; the sidebar's own transform transition still animates on mobile. */
 .adm-shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; }
-@media (max-width: 920px) {
-  .adm-shell { grid-template-columns: 64px 1fr; }
-  .sb-label, .sb-brand-name, .sb-role-note { display: none; }
-  .sb-link { justify-content: center; padding: 0; }
-}
+.adm-shell[data-collapsed="true"] { grid-template-columns: var(--sidebar-cw) 1fr; }
 
 /* sidebar */
 .sidebar {
   background: var(--ink); color: var(--fog);
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh;
-  overflow-y: auto;
+  position: sticky; top: 0; height: 100vh; height: 100dvh;
+  overflow: hidden;                       /* pattern is pinned at the bottom */
+  z-index: 60;
 }
-.sb-brand {
+.sb-top {
   display: flex; align-items: center; gap: 10px;
-  padding: 18px 16px 14px;
+  padding: 16px 12px 14px 16px; min-height: 60px;
   border-bottom: 1px solid rgba(238,241,244,.12);
 }
-.sb-logo {
-  width: 40px; height: 25px; flex: 0 0 40px;
-  background-color: var(--fog);
-  -webkit-mask: url("/design/logo-mark.png") no-repeat center / contain;
-          mask: url("/design/logo-mark.png") no-repeat center / contain;
-}
-.sb-brand-name { display: flex; flex-direction: column; line-height: 1.1; }
-.sb-brand-name b { font-family: var(--font-display); font-weight: 400; text-transform: uppercase; font-size: 14px; letter-spacing: .04em; }
+.sb-brand-name { display: flex; flex-direction: column; line-height: 1.1; flex: 1; min-width: 0; }
+.sb-brand-name b { font-family: var(--font-display); font-weight: 400; text-transform: uppercase; font-size: 15px; letter-spacing: .04em; }
 .sb-brand-name small { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
-.sb-section { padding: 16px 16px 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: rgba(238,241,244,.45); }
+.sb-collapse, .sb-close {
+  flex: 0 0 auto; width: 32px; height: 32px;
+  display: grid; place-items: center; border-radius: var(--radius);
+  color: rgba(238,241,244,.7);
+  transition: background-color .15s ease-out, color .15s ease-out, transform .2s ease-out;
+}
+.sb-collapse:hover, .sb-close:hover { background: rgba(238,241,244,.09); color: var(--fog); }
+.sb-close { display: none; }             /* mobile only (drawer close) */
+.adm-shell[data-collapsed="true"] .sb-collapse { transform: rotate(180deg); }
+
+.sb-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column;
+  padding-bottom: 8px; z-index: 1;
+}
+.sb-section { padding: 16px 16px 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: rgba(238,241,244,.45); white-space: nowrap; }
 .sb-nav { display: flex; flex-direction: column; padding: 0 8px; gap: 2px; }
 .sb-link {
   display: flex; align-items: center; gap: 12px;
   min-height: 42px; padding: 0 10px;
   border-radius: var(--radius);
   color: rgba(238,241,244,.78); font-size: 14.5px; font-weight: 500;
-  border-left: 2px solid transparent;
+  border-left: 2px solid transparent; white-space: nowrap;
   transition: background-color .15s ease-out, color .15s ease-out;
 }
 .sb-link svg { flex: 0 0 auto; opacity: .75; }
+.sb-link .sb-label { overflow: hidden; text-overflow: ellipsis; }
 .sb-link:hover { background: rgba(238,241,244,.07); color: var(--fog); }
 .sb-link.is-active { background: rgba(242,99,35,.14); color: var(--fog); border-left-color: var(--accent); }
 .sb-link.is-active svg { color: var(--accent); opacity: 1; }
-.sb-foot { margin-top: auto; padding: 14px 16px; border-top: 1px solid rgba(238,241,244,.12); }
-.sb-role-note { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: rgba(238,241,244,.45); }
-.sb-wing {
-  position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%) scaleX(-1);
-  width: 150px; height: 190px; pointer-events: none;
-  background-color: var(--fog); opacity: .05;
-  -webkit-mask: url("/brand/full-logo.webp") no-repeat center / contain;
-          mask: url("/brand/full-logo.webp") no-repeat center / contain;
+.sb-foot { margin-top: auto; padding: 14px 16px 30px; border-top: 1px solid rgba(238,241,244,.12); position: relative; z-index: 1; }
+.sb-foot .sb-link { padding-left: 2px; }
+.sb-role-note { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: rgba(238,241,244,.45); margin-top: 10px; white-space: nowrap; }
+
+/* sign-out lives at the end of the rail, in front of the pattern; danger-tinted on hover */
+.sb-signout { width: 100%; margin-top: 4px; color: rgba(238,241,244,.82); }
+.sb-signout:hover { background: rgba(210,75,62,.16); color: #ff7063; }
+.sb-signout:hover svg { color: #ff7063; opacity: 1; }
+
+/* Matessa pattern watermark — a backdrop at the bottom of the rail, fading upward.
+   Absolute so the footer (sign-out) renders in front of it. */
+.sb-pattern {
+  position: absolute; left: 0; right: 0; bottom: 14px;   /* lifted up off the bottom edge */
+  height: 250px; pointer-events: none; z-index: 0;
+  background: url("/brand/matessa-pattern.webp") repeat top center / 158px auto;
+  opacity: .28;
+  -webkit-mask-image: linear-gradient(to top, #000 6%, transparent 100%);
+          mask-image: linear-gradient(to top, #000 6%, transparent 100%);
+}
+
+/* collapsed rail (desktop): icons only, labels hidden (native title tooltips) */
+.adm-shell[data-collapsed="true"] .sb-brand-name,
+.adm-shell[data-collapsed="true"] .sb-label,
+.adm-shell[data-collapsed="true"] .sb-section,
+.adm-shell[data-collapsed="true"] .sb-role-note { display: none; }
+.adm-shell[data-collapsed="true"] .sb-top { justify-content: center; padding: 16px 8px 14px; }
+.adm-shell[data-collapsed="true"] .sb-nav { padding: 0 10px; }
+.adm-shell[data-collapsed="true"] .sb-link { justify-content: center; gap: 0; padding: 0; border-left-width: 0; }
+.adm-shell[data-collapsed="true"] .sb-foot { padding: 12px 10px; }
+.adm-shell[data-collapsed="true"] .sb-foot .sb-link { justify-content: center; padding: 0; }
+
+/* mobile menu button (hamburger) + drawer scrim — desktop hidden */
+.adm-menu-btn { display: none; flex: 0 0 auto; width: 38px; height: 38px; margin-left: -6px; place-items: center; border-radius: var(--radius); color: var(--text-primary); }
+.adm-menu-btn:hover { background: var(--bg-raised); }
+.adm-scrim { display: none; position: fixed; inset: 0; z-index: 55; background: rgba(11,13,16,.5); border: none; }
+
+/* ---- mobile: sidebar becomes an off-canvas drawer ---- */
+@media (max-width: 920px) {
+  .adm-shell, .adm-shell[data-collapsed="true"] { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 0; left: 0;
+    width: min(82vw, var(--sidebar-w)); height: 100vh; height: 100dvh;
+    transform: translateX(-100%); transition: transform .28s ease-out;
+    box-shadow: var(--shadow-overlay);
+  }
+  .adm-shell[data-mobile-open="true"] .sidebar { transform: translateX(0); }
+  /* on mobile always show full labels, even if the collapsed flag is set */
+  .sidebar .sb-brand-name, .sidebar .sb-label, .sidebar .sb-section, .sidebar .sb-role-note { display: revert; }
+  .sidebar .sb-link { justify-content: flex-start; gap: 12px; padding: 0 10px; border-left-width: 2px; }
+  .sidebar .sb-top { justify-content: space-between; padding: 16px 12px 14px 16px; }
+  .sb-collapse { display: none; }
+  .sb-close { display: grid; }
+  .adm-menu-btn { display: grid; }
+  .adm-shell[data-mobile-open="true"] .adm-scrim { display: block; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-shell, .sidebar { transition: none; }
 }
 
 /* main column */
@@ -693,4 +758,47 @@ select.text-input { appearance: none; background-image: url("data:image/svg+xml;
   margin-top: 10px;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* ============ DASHBOARD CHARTS (gauge / pie / heatmap) ============ */
+.gauge-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 16px; }
+.gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.gauge svg { width: 100%; max-width: 190px; height: auto; display: block; color: var(--text-primary); }
+.gauge-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); text-align: center; }
+
+.heatgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 760px) { .heatgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 380px) { .heatgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.heatcell {
+  aspect-ratio: 1 / 1; border-radius: var(--radius);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 1px solid var(--border); overflow: hidden; padding: 2px; text-align: center;
+}
+.heatcell .hc-lbl { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; opacity: .9; }
+.heatcell .hc-val { font-family: var(--font-action); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.heat-scale { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.heat-bar { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(62,95,45,.12), rgba(62,95,45,1)); }
+
+/* ============ RESPONSIVE (tablet / mobile) ============ */
+@media (max-width: 920px) {
+  .adm-topbar { padding: 0 14px; gap: 10px; }
+  .adm-content { padding: 18px 16px 40px; }
+  /* sign-out now lives in the sidebar, so the topbar shows the user's name here */
+}
+@media (max-width: 560px) {
+  .adm-topbar { min-height: 56px; }
+  .adm-topbar h1 { font-size: 17px; }
+  .adm-topbar .crumb { display: none; }
+  .user-chip .rl { display: none; }                    /* keep the name, drop the role */
+  .user-chip .nm { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .adm-content { padding: 14px 12px 36px; gap: 16px; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kpi .k-value { font-size: 24px; }
+  .page-head { gap: 12px; }
+  .card-head { flex-wrap: wrap; }
+  .modal-scrim { padding: 12px; align-items: flex-end; }
+  .modal { max-height: 92vh; }
+  .modal-foot { flex-direction: column-reverse; }
+  .modal-foot .btn { width: 100%; }
+  .field-row { grid-template-columns: 1fr; }
 }

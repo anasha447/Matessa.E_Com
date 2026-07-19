@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "./ui";
 import { formatMoney } from "@/lib/utils/money";
+import { orderStatusLabel } from "@/lib/utils/orderStatus";
 import type { OrderSummaryResponse } from "@/lib/api";
 
 function shortDate(iso: string): string {
@@ -47,7 +48,7 @@ export function OrdersTable({ orders }: { orders: OrderSummaryResponse[] }) {
               <td className="id-cell">{o.orderNumber}</td>
               <td className="muted">Customer #{o.userId}</td>
               <td>
-                <StatusBadge value={o.status} />
+                <StatusBadge value={o.status} label={orderStatusLabel(o.status)} />
               </td>
               <td>
                 <StatusBadge value={o.paymentStatus} />

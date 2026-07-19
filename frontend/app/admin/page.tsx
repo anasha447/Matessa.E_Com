@@ -2,9 +2,19 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/server/session";
 import { getDashboardData } from "@/lib/server/analytics";
 import { formatMoney } from "@/lib/utils/money";
-import { Donut, HBars, KpiCard, StatusBadge, type BarRow } from "@/components/admin/ui";
+import {
+  Donut,
+  Gauge,
+  Heatmap,
+  KpiCard,
+  Pie,
+  StatusBadge,
+  type DonutSegment,
+  type HeatCell,
+} from "@/components/admin/ui";
 import { TrendChart } from "@/components/admin/TrendChart";
 import { IndiaOrdersMap } from "@/components/admin/IndiaOrdersMap";
+import { orderStatusLabel } from "@/lib/utils/orderStatus";
 import { icons } from "@/components/admin/icons";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +28,8 @@ const STATUS_COLOR: Record<string, string> = {
   DELIVERED: "#3F8F5B",
   CANCELLED: "#D24B3E",
 };
-const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthShort = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1] ?? ym;
 
 export default async function AdminDashboardPage() {
   const user = await getCurrentUser();
@@ -38,17 +49,37 @@ export default async function AdminDashboardPage() {
     );
   }
 
-  const statusRows: BarRow[] = Object.entries(sales.ordersByStatus).map(([k, v]) => ({
-    label: cap(k),
-    value: v ?? 0,
-    color: STATUS_COLOR[k],
-  }));
-  const payRows: BarRow[] = sales.revenueByPaymentMethod.map((p, i) => ({
+  const statusSegments: DonutSegment[] = Object.entries(sales.ordersByStatus)
+    .filter(([, v]) => (v ?? 0) > 0)
+    .map(([k, v]) => ({ label: orderStatusLabel(k), value: v ?? 0, color: STATUS_COLOR[k] ?? "#7A9D3E" }));
+  const paySegments: DonutSegment[] = sales.revenueByPaymentMethod.map((p, i) => ({
     label: PM_LABEL[p.paymentMethod] ?? p.paymentMethod,
     value: p.revenue,
-    sub: `${p.orders} orders`,
     color: ["#3E5F2D", "#7A9D3E", "#F26323"][i % 3],
   }));
+
+  // Gauges — fulfilment rate, dispatch SLA (avg hours to ship), month-over-month growth.
+  const delivered = sales.ordersByStatus.DELIVERED ?? 0;
+  const cancelled = sales.ordersByStatus.CANCELLED ?? 0;
+  const fulfilRate = delivered / Math.max(1, sales.totalOrders - cancelled);
+  const shipH = sales.operations.avgHoursToShip ?? 0;
+  const shipColor = shipH <= 24 ? "#3F8F5B" : shipH <= 48 ? "#E0A92E" : "#D24B3E";
+  // monthOverMonthPct is null when there's no prior-month baseline.
+  const momRaw = sales.revenue.monthOverMonthPct;
+  const mom = momRaw ?? 0;
+  const momFrac = (Math.max(-50, Math.min(50, mom)) + 50) / 100;
+  const momDisplay = momRaw == null ? "—" : `${momRaw >= 0 ? "+" : ""}${momRaw.toFixed(1)}%`;
+  const momColor = momRaw == null ? "var(--text-secondary)" : momRaw >= 0 ? "#3F8F5B" : "#D24B3E";
+
+  // Heatmap — a fixed last-12-months grid (zero-filled) so it reads as a grid even
+  // before a full year of revenue has accrued.
+  const trendByMonth = new Map(trend.map((t) => [t.month, t.revenue]));
+  const now = new Date();
+  const heatCells: HeatCell[] = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return { label: monthShort(ym), value: trendByMonth.get(ym) ?? 0 };
+  });
 
   return (
     <div className="adm-content">
@@ -64,24 +95,38 @@ export default async function AdminDashboardPage() {
 
       <div className="card">
         <div className="card-head">
+          <h3>Fulfilment health</h3>
+          <span className="sub">at a glance</span>
+        </div>
+        <div className="card-body">
+          <div className="gauge-row">
+            <Gauge value={fulfilRate} max={1} display={`${Math.round(fulfilRate * 100)}%`} label="Delivered rate" color="#3F8F5B" />
+            <Gauge value={Math.min(shipH, 72)} max={72} display={`${shipH}h`} label="Avg to dispatch" color={shipColor} />
+            <Gauge value={momFrac} max={1} display={momDisplay} label="MoM growth" color={momColor} />
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
           <h3>Ops queue</h3>
-          <span className="sub">avg {sales.operations.avgHoursToShip}h to ship</span>
+          <span className="sub">avg {sales.operations.avgHoursToShip}h to dispatch</span>
         </div>
         <div className="card-body">
           <div className="ops-queue">
             <Link className="ops-item" href="/admin/orders?status=PENDING">
               <span className="ops-n">{sales.operations.awaitingPayment}</span>
               <span className="ops-t">
-                <b>Awaiting payment</b>
-                <small>Pending orders to chase or cancel</small>
+                <b>New orders</b>
+                <small>Placed orders to process and dispatch</small>
               </span>
               {icons.arrowR}
             </Link>
             <Link className="ops-item is-cool" href="/admin/orders?status=PAID">
               <span className="ops-n">{sales.operations.awaitingShipment}</span>
               <span className="ops-t">
-                <b>Awaiting shipment</b>
-                <small>Paid orders ready to pack and ship</small>
+                <b>Ready for transit</b>
+                <small>Dispatched orders awaiting courier pickup</small>
               </span>
               {icons.arrowR}
             </Link>
@@ -105,7 +150,16 @@ export default async function AdminDashboardPage() {
             <span className="sub">{sales.totalOrders.toLocaleString()} total</span>
           </div>
           <div className="card-body">
-            <HBars rows={statusRows} />
+            {statusSegments.length === 0 ? (
+              <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>No orders yet.</p>
+            ) : (
+              <Donut
+                size={150}
+                centerValue={sales.totalOrders.toLocaleString()}
+                centerLabel="orders"
+                segments={statusSegments}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -114,9 +168,14 @@ export default async function AdminDashboardPage() {
         <div className="card">
           <div className="card-head">
             <h3>Revenue by payment method</h3>
+            <span className="sub">share of revenue</span>
           </div>
           <div className="card-body">
-            <HBars rows={payRows} money />
+            {paySegments.length === 0 ? (
+              <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>No revenue yet.</p>
+            ) : (
+              <Pie segments={paySegments} />
+            )}
           </div>
         </div>
         <div className="card">
@@ -152,6 +211,20 @@ export default async function AdminDashboardPage() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h3>Revenue heat</h3>
+          <span className="sub">last 12 months · intensity</span>
+        </div>
+        <div className="card-body">
+          {heatCells.length === 0 ? (
+            <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>Not enough data yet.</p>
+          ) : (
+            <Heatmap cells={heatCells} money />
+          )}
         </div>
       </div>
 

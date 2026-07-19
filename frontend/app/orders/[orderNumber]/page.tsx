@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
+import { OrderTracker } from "@/components/orders/OrderTracker";
 import { getCurrentUser, serverGet } from "@/lib/server/session";
 import { formatMoney } from "@/lib/utils/money";
 import type { OrderResponse } from "@/lib/api";
@@ -70,7 +71,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
             Placed {new Date(order.createdAt).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}
           </p>
 
-          <div className="mt-8 grid gap-6 nav:grid-cols-[1fr_280px]">
+          <div className="mt-8 rounded-[22px] bg-white p-6 shadow-lg">
+            <OrderTracker status={order.status} />
+          </div>
+
+          <div className="mt-6 grid gap-6 nav:grid-cols-[1fr_280px]">
             {/* Items */}
             <div className="rounded-[22px] bg-white p-6 shadow-lg">
               <h2 className="mb-4 font-heading text-lg font-bold text-darkgreen">Items</h2>

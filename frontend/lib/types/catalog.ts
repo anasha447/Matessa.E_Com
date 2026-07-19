@@ -171,7 +171,8 @@ export interface CouponRequest {
   discountType: DiscountType;
   discountValue: number;
   minSpend: number;
-  maxUses: number;
+  /** null = unlimited uses. The backend rejects 0 (@Min(1)); omit/null for unlimited. */
+  maxUses: number | null;
   perUserLimit: number;
   validFrom: string;
   validUntil: string;
@@ -184,7 +185,8 @@ export interface CouponResponse {
   discountType: DiscountType;
   discountValue: number;
   minSpend: number;
-  maxUses: number;
+  /** null = unlimited uses. */
+  maxUses: number | null;
   usedCount: number;
   perUserLimit: number;
   validFrom: string;

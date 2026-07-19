@@ -19,7 +19,7 @@ const fmtDate = (iso: string) => {
 function couponStateClient(c: CouponResponse): string {
   if (!c.active) return "INACTIVE";
   if (new Date(c.validUntil) < new Date()) return "EXPIRED";
-  if (c.maxUses > 0 && c.usedCount >= c.maxUses) return "EXHAUSTED";
+  if (c.maxUses != null && c.usedCount >= c.maxUses) return "EXHAUSTED";
   return "ACTIVE";
 }
 
@@ -74,7 +74,6 @@ export function PromotionsView({ data }: { data: PromotionsData }) {
     <div className="adm-content">
       <div className="page-head">
         <div className="ttl">
-          <h2>Promotions</h2>
           <p>Coupons customers type at checkout, and automatic markdowns on products or categories.</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -111,7 +110,7 @@ export function PromotionsView({ data }: { data: PromotionsData }) {
               </thead>
               <tbody>
                 {data.coupons.map((c) => {
-                  const pct = c.maxUses > 0 ? Math.min(100, (c.usedCount / c.maxUses) * 100) : null;
+                  const pct = c.maxUses != null ? Math.min(100, (c.usedCount / c.maxUses) * 100) : null;
                   return (
                     <tr key={c.id}>
                       <td className="id-cell" style={{ fontWeight: 600 }}>{c.code}</td>
@@ -122,7 +121,7 @@ export function PromotionsView({ data }: { data: PromotionsData }) {
                       <td style={{ minWidth: 130 }}>
                         <span className="mono" style={{ fontSize: 12 }}>
                           {c.usedCount}
-                          {c.maxUses > 0 ? ` / ${c.maxUses}` : ""}
+                          {c.maxUses != null ? ` / ${c.maxUses}` : ""}
                         </span>
                         {pct != null && (
                           <span style={{ display: "block", height: 4, background: "var(--bg-raised)", borderRadius: 2, marginTop: 4, overflow: "hidden" }}>

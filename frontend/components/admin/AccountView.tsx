@@ -79,7 +79,6 @@ export function AccountView({ user }: { user: UserResponse }) {
       )}
       <div className="page-head">
         <div className="ttl">
-          <h2>Account</h2>
           <p>Manage your profile and password. Signed in as <span className="mono" style={{ fontSize: 12.5 }}>{user.email}</span>.</p>
         </div>
       </div>

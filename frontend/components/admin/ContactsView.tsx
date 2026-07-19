@@ -52,7 +52,6 @@ export function ContactsView({
     <div className="adm-content">
       <div className="page-head">
         <div className="ttl">
-          <h2>Contacts</h2>
           <p>Customer support queries and newsletter subscribers.</p>
         </div>
       </div>

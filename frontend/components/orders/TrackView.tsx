@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { OrderResponse } from "@/lib/api";
 import { formatMoney } from "@/lib/utils/money";
 import { OrderStatusBadge } from "./OrderStatusBadge";
+import { OrderTracker } from "./OrderTracker";
 
 export function TrackView() {
   const sp = useSearchParams();
@@ -60,7 +61,10 @@ export function TrackView() {
             <p className="font-body text-lg font-bold text-green">{order.orderNumber}</p>
             <OrderStatusBadge status={order.status} />
           </div>
-          <ul className="mt-4 space-y-1.5 border-t border-gray-100 pt-4">
+          <div className="mt-6">
+            <OrderTracker status={order.status} />
+          </div>
+          <ul className="mt-6 space-y-1.5 border-t border-gray-100 pt-4">
             {order.items.map((i) => (
               <li key={i.id} className="flex justify-between font-body text-sm text-gray-600">
                 <span>

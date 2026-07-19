@@ -1,4 +1,5 @@
 import type { OrderStatus } from "@/lib/api";
+import { ORDER_STATUS_LABEL } from "@/lib/utils/orderStatus";
 
 // Order status pill — consistent color semantics with the admin dashboard.
 const STYLES: Record<OrderStatus, string> = {
@@ -9,18 +10,10 @@ const STYLES: Record<OrderStatus, string> = {
   CANCELLED: "bg-red-100 text-red-600",
 };
 
-const LABEL: Record<OrderStatus, string> = {
-  PENDING: "Pending",
-  PAID: "Paid",
-  SHIPPED: "Shipped",
-  DELIVERED: "Delivered",
-  CANCELLED: "Cancelled",
-};
-
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return (
     <span className={`inline-flex items-center rounded-full px-3 py-1 font-body text-xs font-bold ${STYLES[status]}`}>
-      {LABEL[status]}
+      {ORDER_STATUS_LABEL[status]}
     </span>
   );
 }

@@ -54,7 +54,6 @@ export function IndiaOrdersMap({ data }: { data: StateOrderCount[] }) {
   const total = data.reduce((s, d) => s + d.orderCount, 0);
 
   const active = pinned ?? hovered;
-  const activeCount = active ? (counts.get(active) ?? 0) : null;
 
   return (
     <div className="india-map">
@@ -85,19 +84,6 @@ export function IndiaOrdersMap({ data }: { data: StateOrderCount[] }) {
             );
           })}
         </svg>
-        <div className={`india-map-tip${active ? " is-visible" : ""}`} aria-live="polite">
-          {active ? (
-            <>
-              <b>{active}</b>
-              <span>
-                {activeCount} order{activeCount === 1 ? "" : "s"}
-                {pinned === active ? " · pinned" : ""}
-              </span>
-            </>
-          ) : (
-            <span>Hover or tap a state</span>
-          )}
-        </div>
       </div>
 
       <div className="india-map-side">

@@ -33,7 +33,6 @@ export function CustomersView({
     <div className="adm-content">
       <div className="page-head">
         <div className="ttl">
-          <h2>Customers</h2>
           <p>Customer directory and analytics. Admin-only.</p>
         </div>
       </div>

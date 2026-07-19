@@ -85,7 +85,6 @@ export function StaffView({
 
       <div className="page-head">
         <div className="ttl">
-          <h2>Staff</h2>
           <p>
             Provision managers and manage staff access. Everything here maps to{" "}
             <span className="mono" style={{ fontSize: 12.5 }}>/api/admin/**</span> — admin only.

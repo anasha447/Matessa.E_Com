@@ -6,6 +6,8 @@ import { Field } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import type { CouponRequest, CouponResponse } from "@/lib/api";
 
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
 /** Create/edit a coupon. Validates client-side, then POST/PUT via the BFF. */
 export function CouponModal({
   initial,
@@ -16,17 +18,22 @@ export function CouponModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState({
+  // New coupons default to a window starting today (a past validFrom is rejected
+  // by the backend), running 90 days. The modal only mounts on a client click, so
+  // reading the clock in the initializer can't cause a hydration mismatch.
+  const [form, setForm] = useState(() => ({
     code: initial?.code ?? "",
     discountType: initial?.discountType ?? "PERCENTAGE",
     discountValue: initial?.discountValue?.toString() ?? "",
     minSpend: initial?.minSpend?.toString() ?? "",
     maxUses: initial?.maxUses?.toString() ?? "",
     perUserLimit: initial?.perUserLimit?.toString() ?? "1",
-    validFrom: (initial?.validFrom ?? "2026-06-13T00:00:00Z").slice(0, 10),
-    validUntil: (initial?.validUntil ?? "2026-09-30T00:00:00Z").slice(0, 10),
+    validFrom: initial?.validFrom ? initial.validFrom.slice(0, 10) : isoDay(new Date()),
+    validUntil: initial?.validUntil
+      ? initial.validUntil.slice(0, 10)
+      : isoDay(new Date(Date.now() + 90 * 86_400_000)),
     active: initial ? String(initial.active) : "true",
-  });
+  }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
@@ -48,7 +55,8 @@ export function CouponModal({
       discountType: form.discountType as CouponRequest["discountType"],
       discountValue: Number(form.discountValue),
       minSpend: form.minSpend === "" ? 0 : Number(form.minSpend),
-      maxUses: form.maxUses === "" ? 0 : Number(form.maxUses),
+      // backend requires maxUses >= 1; blank / non-positive means unlimited → send null
+      maxUses: Number(form.maxUses) >= 1 ? Number(form.maxUses) : null,
       perUserLimit: Number(form.perUserLimit) || 1,
       validFrom: `${form.validFrom}T00:00:00Z`,
       validUntil: `${form.validUntil}T23:59:59Z`,
@@ -100,7 +108,7 @@ export function CouponModal({
             <option value="FIXED_AMOUNT">Fixed amount</option>
           </select>
         </Field>
-        <Field label={form.discountType === "PERCENTAGE" ? "Value (%)" : "Value (USD)"} error={errors.discountValue}>
+        <Field label={form.discountType === "PERCENTAGE" ? "Value (%)" : "Value (₹)"} error={errors.discountValue}>
           <input className="text-input" type="number" step="0.01" min="0" value={form.discountValue} onChange={set("discountValue")} />
         </Field>
       </div>

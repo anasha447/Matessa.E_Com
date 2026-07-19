@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { icons } from "./icons";
+import { usePathname } from "next/navigation";
 
 function pageMeta(path: string): { h1: string; crumb: string } {
   if (/^\/admin\/orders\/[^/]+$/.test(path)) return { h1: "Orders", crumb: "Orders / Detail" };
@@ -20,24 +19,24 @@ export function AdminTopbar({
   firstName,
   lastName,
   isAdmin,
+  onMenu,
 }: {
   firstName: string;
   lastName: string;
   isAdmin: boolean;
+  onMenu?: () => void;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const meta = pageMeta(pathname);
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`;
 
-  const logout = async () => {
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => {});
-    router.push("/login");
-    router.refresh();
-  };
-
   return (
     <header className="adm-topbar">
+      <button type="button" className="adm-menu-btn" onClick={onMenu} aria-label="Open menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      </button>
       <h1>{meta.h1}</h1>
       <span className="crumb">{meta.crumb}</span>
       <div className="topbar-user">
@@ -50,9 +49,6 @@ export function AdminTopbar({
           </div>
           <div className="user-avatar">{initials}</div>
         </Link>
-        <button className="logout-btn" type="button" onClick={logout}>
-          {icons.logout} Sign out
-        </button>
       </div>
     </header>
   );

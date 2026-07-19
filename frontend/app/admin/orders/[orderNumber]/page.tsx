@@ -3,6 +3,7 @@ import { getAccessToken, serverGet } from "@/lib/server/session";
 import { formatMoney } from "@/lib/utils/money";
 import { StatusBadge } from "@/components/admin/ui";
 import { OrderActions } from "@/components/admin/OrderActions";
+import { orderStatusLabel } from "@/lib/utils/orderStatus";
 import type { OrderResponse, OrderStatusHistoryResponse } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             <h2 style={{ fontFamily: "var(--font-mono)", fontSize: 19, textTransform: "none", letterSpacing: ".02em" }}>
               {order.orderNumber}
             </h2>
-            <StatusBadge value={order.status} />
+            <StatusBadge value={order.status} label={orderStatusLabel(order.status)} />
           </div>
           <p>Customer #{order.userId} · placed {fmtDateTime(order.createdAt)}</p>
         </div>
@@ -202,7 +203,9 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                       <div className="tl-dot" />
                       <div className="tl-body">
                         <div className="tl-title">
-                          {h.fromStatus ? `${h.fromStatus} → ${h.toStatus}` : h.toStatus}
+                          {h.fromStatus
+                            ? `${orderStatusLabel(h.fromStatus)} → ${orderStatusLabel(h.toStatus)}`
+                            : orderStatusLabel(h.toStatus)}
                         </div>
                         <div className="tl-meta">
                           {fmtDateTime(h.changedAt)}

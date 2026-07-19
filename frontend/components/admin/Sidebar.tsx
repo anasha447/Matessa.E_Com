@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { icons } from "./icons";
 
 interface NavItem {
@@ -42,58 +42,98 @@ const NAV: NavGroup[] = [
   },
 ];
 
-export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+export function Sidebar({
+  isAdmin,
+  collapsed,
+  onToggleCollapse,
+  onCloseMobile,
+  onNavigate,
+}: {
+  isAdmin: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onCloseMobile: () => void;
+  onNavigate: () => void;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const isActive = (it: NavItem) =>
     it.exact ? pathname === it.path : pathname === it.path || pathname.startsWith(it.path + "/");
 
+  const logout = async () => {
+    onCloseMobile();
+    await fetch("/api/session/logout", { method: "POST" }).catch(() => {});
+    router.push("/login");
+    router.refresh();
+  };
+
+  const link = (it: NavItem | { path: string; label: string; icon: keyof typeof icons }, active: boolean) => (
+    <Link
+      key={it.path}
+      href={it.path}
+      className={`sb-link${active ? " is-active" : ""}`}
+      aria-current={active ? "page" : undefined}
+      data-label={it.label}
+      title={collapsed ? it.label : undefined}
+      onClick={onNavigate}
+    >
+      {icons[it.icon]}
+      <span className="sb-label">{it.label}</span>
+    </Link>
+  );
+
   return (
     <aside className="sidebar">
-      <div className="sb-brand">
-        <div className="sb-logo" />
-        <div className="sb-brand-name">
+      <div className="sb-top">
+        <span className="sb-brand-name">
           <b>Matessa</b>
-          <small>Admin panel</small>
-        </div>
-      </div>
-
-      {NAV.filter((g) => !g.adminOnly || isAdmin).map((g) => (
-        <div key={g.section}>
-          <div className="sb-section">{g.section}</div>
-          <nav className="sb-nav" aria-label={g.section}>
-            {g.items.map((it) => (
-              <Link
-                key={it.path}
-                href={it.path}
-                className={`sb-link${isActive(it) ? " is-active" : ""}`}
-                aria-current={isActive(it) ? "page" : undefined}
-              >
-                {icons[it.icon]}
-                <span>{it.label}</span>
-              </Link>
-            ))}
-          </nav>
-        </div>
-      ))}
-
-      <div className="sb-wing" aria-hidden="true" />
-      <div className="sb-foot">
-        <Link
-          className={`sb-link${pathname.startsWith("/admin/account") ? " is-active" : ""}`}
-          href="/admin/account"
-          style={{ paddingLeft: 2 }}
+          <small>Console</small>
+        </span>
+        {/* desktop: collapse the rail to icons only */}
+        <button
+          type="button"
+          className="sb-collapse"
+          onClick={onToggleCollapse}
+          aria-label={collapsed ? "Expand menu" : "Collapse menu"}
+          title={collapsed ? "Expand" : "Collapse"}
         >
-          {icons.account}
-          <span>Account</span>
-        </Link>
-        <Link className="sb-link" href="/" style={{ paddingLeft: 2 }}>
-          {icons.store}
-          <span>View store</span>
-        </Link>
-        <div className="sb-role-note" style={{ marginTop: 8 }}>
-          Signed in · {isAdmin ? "Admin" : "Manager"}
+          {icons.chevL}
+        </button>
+        {/* mobile: close the drawer */}
+        <button type="button" className="sb-close" onClick={onCloseMobile} aria-label="Close menu">
+          {icons.close}
+        </button>
+      </div>
+
+      <div className="sb-scroll">
+        {NAV.filter((g) => !g.adminOnly || isAdmin).map((g) => (
+          <div key={g.section} className="sb-group">
+            <div className="sb-section">{g.section}</div>
+            <nav className="sb-nav" aria-label={g.section}>
+              {g.items.map((it) => link(it, isActive(it)))}
+            </nav>
+          </div>
+        ))}
+
+        <div className="sb-foot">
+          {link({ path: "/admin/account", label: "Account", icon: "account" }, pathname.startsWith("/admin/account"))}
+          {link({ path: "/", label: "View store", icon: "store" }, false)}
+          <button
+            type="button"
+            className="sb-link sb-signout"
+            onClick={logout}
+            data-label="Sign out"
+            title={collapsed ? "Sign out" : undefined}
+          >
+            {icons.logout}
+            <span className="sb-label">Sign out</span>
+          </button>
+          <div className="sb-role-note">Signed in · {isAdmin ? "Admin" : "Manager"}</div>
         </div>
       </div>
+
+      {/* Matessa pattern watermark backdrop, fading upward — the footer sits in front */}
+      <div className="sb-pattern" aria-hidden="true" />
     </aside>
   );
 }

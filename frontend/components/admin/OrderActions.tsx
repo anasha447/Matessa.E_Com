@@ -8,14 +8,16 @@ import type { OrderStatus } from "@/lib/api";
 import { icons } from "./icons";
 import { Modal } from "./Modal";
 
+// Backend transitions stay PENDING→PAID→SHIPPED→DELIVERED (order-service is strict);
+// the labels present the friendlier journey Placed → Dispatched → In transit → Delivered.
 const NEXT: Partial<Record<OrderStatus, OrderStatus>> = {
   PENDING: "PAID",
   PAID: "SHIPPED",
   SHIPPED: "DELIVERED",
 };
 const ADVANCE_LABEL: Partial<Record<OrderStatus, string>> = {
-  PENDING: "Mark paid",
-  PAID: "Mark shipped",
+  PENDING: "Mark dispatched",
+  PAID: "Mark in transit",
   SHIPPED: "Mark delivered",
 };
 
@@ -179,7 +181,7 @@ export function OrderActions({
           <p style={{ fontSize: 14.5, lineHeight: 1.55 }}>
             {orderNumber} will be cancelled
             {paymentStatus === "COMPLETED" ? " and the payment refunded" : ""}. Orders already
-            shipped can&apos;t be cancelled (the API returns 409).
+            in transit can&apos;t be cancelled (the API returns 409).
           </p>
         </Modal>
       )}

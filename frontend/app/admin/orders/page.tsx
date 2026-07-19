@@ -3,12 +3,12 @@ import { getAdminOrders } from "@/lib/server/adminOrders";
 import { OrdersTable } from "@/components/admin/OrdersTable";
 import { AdminPager } from "@/components/admin/AdminPager";
 import { EmptyBlock } from "@/components/admin/ui";
+import { orderStatusLabel } from "@/lib/utils/orderStatus";
 import type { OrderStatus } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 const ORDER_STATUSES: OrderStatus[] = ["PENDING", "PAID", "SHIPPED", "DELIVERED", "CANCELLED"];
-const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
 export default async function AdminOrdersPage({
   searchParams,
@@ -30,7 +30,6 @@ export default async function AdminOrdersPage({
     <div className="adm-content">
       <div className="page-head">
         <div className="ttl">
-          <h2>Orders</h2>
           <p>{totalAll} orders · click a row for detail and actions.</p>
         </div>
       </div>
@@ -45,7 +44,7 @@ export default async function AdminOrdersPage({
             className={`f-chip${status === s ? " is-active" : ""}`}
             href={`/admin/orders?status=${s}`}
           >
-            {cap(s)} <span className="cnt">{counts[s] ?? 0}</span>
+            {orderStatusLabel(s)} <span className="cnt">{counts[s] ?? 0}</span>
           </Link>
         ))}
       </div>
