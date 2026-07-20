@@ -7,8 +7,8 @@ import { BrandBadge } from "@/components/ui/brand";
 
 export type { ProductCardData };
 
-/** Product card (DESIGN-SYSTEM.md §5): white card, 2rem image tile on light gray with
- *  mix-blend-multiply pack shots, thin gray border → orange on hover, shadow lift +
+/** Product card (DESIGN-SYSTEM.md §5): white card, 2rem image tile with a cover-fit
+ *  photo that fills the tile, thin gray border → orange on hover, shadow lift +
  *  slight scale, Asul name, ₹ price in green. */
 export function ProductCard({ product }: { product: ProductCardData }) {
   const { name, category, price, image, alt, href, badge } = product;
@@ -28,7 +28,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           alt={alt}
           width={420}
           height={420}
-          className="aspect-square w-full object-contain mix-blend-multiply transition-transform duration-500 group-hover:scale-110"
+          className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
       </div>
       <div className="px-2 pb-2 pt-3.5">

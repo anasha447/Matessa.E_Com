@@ -184,9 +184,9 @@ export function HealthFocus() {
               <span style={{ color: "#3E5F2D" }}>clarity</span>
             </strong>{" "}
             — a clean, natural lift without the jitters,{" "}
-            <strong style={{ color: "#2F3B28", background: "rgba(243,203,87,0.35)", padding: "0 4px", borderRadius: 4 }}>
+            
               elevating your well-being
-            </strong>{" "}
+            
             every day.
           </p>
         </Reveal>

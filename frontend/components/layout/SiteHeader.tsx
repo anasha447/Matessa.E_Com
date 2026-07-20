@@ -7,6 +7,7 @@ import { CartButton } from "@/components/cart/CartButton";
 import { NavLinks } from "./NavLinks";
 import { MobileDrawer, type DrawerUser } from "./MobileDrawer";
 
+
 /** Gravatar avatar for the drawer auth block: SHA-256 of the normalized email,
  *  identicon fallback for accounts without a Gravatar. */
 function gravatarUrl(email: string): string {

@@ -32,7 +32,7 @@ export default async function ShopPage({
     <>
       <SiteHeader />
       <main className="min-h-[70svh]">
-        <ShopHero title={activeName ?? "Our Products"} count={total} />
+        <ShopHero title={activeName ?? "Products"} />
         <div className="mx-auto max-w-[1200px] px-5 py-10 nav:px-8 nav:py-14">
           <ShopTabs categories={categories} activeId={categoryId} />
 
