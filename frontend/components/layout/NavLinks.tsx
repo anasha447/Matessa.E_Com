@@ -10,8 +10,9 @@ export const NAV_ITEMS = [
   { label: "Contact Us", href: "/contact" },
 ] as const;
 
-/** Desktop nav links (left column of the header). Active page = orange; hover = orange. */
-export function NavLinks() {
+/** Desktop nav links (left column of the header). Active page = orange; hover = orange.
+ *  `dark` = the dark-green header used off the home page → cream links. */
+export function NavLinks({ dark = false }: { dark?: boolean }) {
   const pathname = usePathname();
   return (
     <div className="hidden nav:flex items-center gap-7">
@@ -23,7 +24,7 @@ export function NavLinks() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={`font-body font-bold text-lg transition-colors duration-300 hover:text-orange-hover ${
-              active ? "text-orange" : "text-darkgreen"
+              active ? "text-orange" : dark ? "text-craemy" : "text-darkgreen"
             }`}
           >
             {item.label}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 
 const ENQUIRY_TYPES = [
   "Order & Shipping",
@@ -99,14 +100,26 @@ export function ContactForm() {
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
   const [enquiryError, setEnquiryError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!queryType) {
       setEnquiryError(true);
       return;
     }
-    setSent(true);
+    setBusy(true);
+    setError(null);
+    try {
+      // actually persist the query so it reaches the admin inbox (POST /api/contact)
+      await api.contact.submit({ email: email.trim(), queryType, message: message.trim() });
+      setSent(true);
+    } catch {
+      setError("Couldn't send your message — please try again in a moment.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const labelClass = "font-body text-[13px] font-bold uppercase tracking-[0.08em] text-[#EADBA2]";
@@ -196,11 +209,17 @@ export function ContactForm() {
             />
           </div>
           
+          {error && (
+            <p role="alert" className="rounded-[12px] bg-[#F26323]/15 px-4 py-2.5 font-body text-[14px] font-semibold text-[#F9C6AE]">
+              {error}
+            </p>
+          )}
           <button
             type="submit"
-            className="mt-1 w-full rounded-full bg-[#EADBA2] px-8 py-4 font-body text-[15.5px] font-bold text-[#2F3B28] transition-all duration-300 hover:-translate-y-[2px] hover:bg-[#F26323] hover:text-[#F9F7F3]"
+            disabled={busy}
+            className="mt-1 w-full rounded-full bg-[#EADBA2] px-8 py-4 font-body text-[15.5px] font-bold text-[#2F3B28] transition-all duration-300 hover:-translate-y-[2px] hover:bg-[#F26323] hover:text-[#F9F7F3] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Send Message
+            {busy ? "Sending…" : "Send Message"}
           </button>
         </form>
       ) : (

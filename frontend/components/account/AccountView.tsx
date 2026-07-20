@@ -106,7 +106,7 @@ export function AccountView({ user }: { user: UserResponse }) {
       {note && (
         <div
           role="status"
-          className="fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-darkgreen px-5 py-2.5 font-body text-sm font-bold text-cream shadow-2xl"
+          className="fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-darkgreen px-5 py-2.5 font-body text-sm font-bold text-craemy shadow-2xl"
         >
           {note}
         </div>
@@ -120,7 +120,7 @@ export function AccountView({ user }: { user: UserResponse }) {
       {/* Identity + shortcuts */}
       <div className="mt-8 rounded-[22px] bg-white p-6 shadow-lg">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="grid h-16 w-16 flex-none place-items-center rounded-full bg-green font-heading text-2xl font-bold text-cream">
+          <div className="grid h-16 w-16 flex-none place-items-center rounded-full bg-green font-heading text-2xl font-bold text-craemy">
             {initials}
           </div>
           <div className="min-w-0 flex-1">

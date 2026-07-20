@@ -44,6 +44,21 @@ export function clearGuestCart() {
 }
 const EMPTY_GUEST_CART: CartResponse = { cartId: null, userId: null, items: [], subtotal: 0 };
 
+/** Retry a transient cart call — the gateway circuit breaker briefly 503s cart ops when
+ *  order-service GC-pauses; a short retry rides through it instead of erroring the user. */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 interface CartContextValue {
   cart: CartResponse | null;
   images: Record<number, string>;
@@ -182,7 +197,7 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
   const addItem = useCallback(
     async (productVariantId: number, quantity = 1) => {
       if (authed) {
-        await apply(await api.cart.addItem({ productVariantId, quantity }));
+        await apply(await withRetry(() => api.cart.addItem({ productVariantId, quantity })));
         return;
       }
       const lines = readGuest();

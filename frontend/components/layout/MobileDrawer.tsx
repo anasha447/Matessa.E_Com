@@ -23,7 +23,7 @@ const DRAWER_NAV = [
 
 /** Left slide-in mobile menu (no bottom tab bar — DESIGN-SYSTEM.md §4).
  *  Hamburger trigger + overlay + drawer panel; auth block pinned at the bottom. */
-export function MobileDrawer({ user }: { user: DrawerUser | null }) {
+export function MobileDrawer({ user, dark = false }: { user: DrawerUser | null; dark?: boolean }) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -31,6 +31,7 @@ export function MobileDrawer({ user }: { user: DrawerUser | null }) {
   const close = useCallback(() => setOpen(false), []);
 
   // Route change closes the drawer (link taps navigate client-side).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(close, [pathname, close]);
 
   // Esc closes; body scroll locks while open; focus moves into the panel.
@@ -49,7 +50,9 @@ export function MobileDrawer({ user }: { user: DrawerUser | null }) {
   return (
     <>
       <button
-        className="nav:hidden grid h-10 w-10 place-items-center rounded-full text-darkgreen transition-colors duration-300 hover:text-orange"
+        className={`nav:hidden grid h-10 w-10 place-items-center rounded-full transition-colors duration-300 hover:text-orange ${
+          dark ? "text-craemy" : "text-darkgreen"
+        }`}
         type="button"
         aria-label="Open menu"
         aria-expanded={open}

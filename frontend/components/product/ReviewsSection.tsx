@@ -23,9 +23,12 @@ export function Stars({ value, size = 16 }: { value: number; size?: number }) {
 export function ReviewsSection({
   productId,
   authed,
+  canReview,
 }: {
   productId: number;
   authed: boolean;
+  /** true only when the signed-in customer has a delivered order with this product. */
+  canReview: boolean;
 }) {
   const [reviews, setReviews] = useState<ReviewResponse[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -71,7 +74,7 @@ export function ReviewsSection({
     <section aria-label="Reviews" className="mx-auto max-w-3xl px-6 py-10">
       <h2 className="mb-6 text-center font-heading text-3xl font-bold text-darkgreen">From Fellow Sippers</h2>
 
-      {authed ? (
+      {authed && canReview ? (
         <div className="mb-8 rounded-[22px] bg-white p-5 shadow-lg">
           <div className="mb-3 flex items-center gap-2">
             <span className="font-body text-sm font-bold text-darkgreen">Your rating</span>
@@ -110,12 +113,16 @@ export function ReviewsSection({
             </button>
           </div>
         </div>
+      ) : authed ? (
+        <p className="mb-8 rounded-2xl bg-craemy/25 px-4 py-3 text-center font-body text-sm text-darkgreen">
+          You can review this blend once you&apos;ve received a delivered order of it.
+        </p>
       ) : (
         <p className="mb-8 text-center font-body text-sm text-gray-500">
           <Link href="/login" className="font-bold text-green hover:text-orange">
             Sign in
           </Link>{" "}
-          to share your own cup.
+          and order this blend to share your own cup.
         </p>
       )}
 

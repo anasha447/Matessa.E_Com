@@ -37,7 +37,7 @@ export function ShopHero({ title = "Products" }: { title?: string }) {
       </div>
 
       <div className="relative mx-auto flex max-w-[1200px] items-center justify-center px-5 py-16 nav:px-8 nav:py-28">
-        <h1 className="text-center font-heading font-bold text-cream [font-size:clamp(52px,9vw,112px)] leading-[0.95] drop-shadow-[0_2px_24px_rgba(0,0,0,0.25)]">
+        <h1 className="text-center font-heading font-bold text-craemy [font-size:clamp(52px,9vw,112px)] leading-[0.95] drop-shadow-[0_2px_24px_rgba(0,0,0,0.25)]">
           {title}
         </h1>
       </div>

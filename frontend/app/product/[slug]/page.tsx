@@ -9,8 +9,11 @@ import { ProductBuyPanel } from "@/components/product/ProductBuyPanel";
 import { CultureBand } from "@/components/product/CultureBand";
 import { FaqAccordion } from "@/components/product/FaqAccordion";
 import { ReviewsSection, Stars } from "@/components/product/ReviewsSection";
+import { CustomerReviews } from "@/components/product/CustomerReviews";
 import { getProductDetailBySlug } from "@/lib/server/product";
+import { serverGet } from "@/lib/server/session";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/session/cookies";
+import type { OrderResponse, OrderSummaryResponse, Page } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,20 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const authed = jar.has(ACCESS_COOKIE) || jar.has(REFRESH_COOKIE);
   const note = INGREDIENT_NOTE[product.slug];
   const isBlend = product.slug in INGREDIENT_NOTE;
+
+  // A customer may review only a product they've received: find a DELIVERED order that
+  // contains one of this product's variants. (Verified-purchase gate.) Summaries don't
+  // carry line items, so pull the detail of each delivered order (few in practice).
+  let canReview = false;
+  if (authed) {
+    const summaries = await serverGet<Page<OrderSummaryResponse>>("/api/orders?size=100");
+    const deliveredIds = (summaries?.content ?? []).filter((o) => o.status === "DELIVERED").map((o) => o.id);
+    if (deliveredIds.length > 0) {
+      const variantIds = new Set(product.variants.map((v) => v.id));
+      const orders = await Promise.all(deliveredIds.map((id) => serverGet<OrderResponse>(`/api/orders/${id}`)));
+      canReview = orders.some((o) => o?.items.some((it) => variantIds.has(it.productVariantId)) ?? false);
+    }
+  }
 
   return (
     <>
@@ -79,8 +96,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </div>
 
         {isBlend && <CultureBand />}
-        <ReviewsSection productId={product.id} authed={authed} />
+        <ReviewsSection productId={product.id} authed={authed} canReview={canReview} />
         <FaqAccordion />
+        <CustomerReviews />
       </main>
       <SiteFooter variant="full" />
     </>
