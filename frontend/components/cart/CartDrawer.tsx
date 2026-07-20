@@ -46,7 +46,7 @@ export function CartDrawer() {
         onClick={close}
       />
       <aside
-        className={`fixed inset-y-0 right-0 z-[99] flex w-[min(84vw,340px)] flex-col bg-white shadow-2xl transition-transform duration-300 ${
+        className={`fixed inset-y-0 right-0 z-[99] flex w-[min(84vw,340px)] flex-col overflow-hidden rounded-l-[var(--radius-2xl)] bg-white shadow-2xl transition-transform duration-300 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-label="Shopping cart"

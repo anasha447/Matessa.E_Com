@@ -39,7 +39,7 @@ export default function AboutPage() {
       <SiteHeader />
       <main>
         {/* Banner */}
-        <section className="relative grid min-h-[70svh] place-items-center overflow-hidden">
+        <section className="relative grid min-h-[46svh] place-items-center overflow-hidden nav:min-h-[70svh]">
           <Image src="/brand/story-banner.webp" alt="" fill priority sizes="100vw" className="object-cover" />
           <div className="absolute inset-0" style={{ background: "rgba(15,20,10,0.42)", backdropFilter: "blur(3px)" }} />
           <Reveal className="relative px-6 text-center">

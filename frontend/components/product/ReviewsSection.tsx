@@ -5,7 +5,6 @@
 // one review per user per product → 409 handled).
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { ReviewResponse } from "@/lib/api";
 import { StarIcon } from "@/components/ui/icons";
@@ -70,11 +69,19 @@ export function ReviewsSection({
     }
   };
 
+  const canWrite = authed && canReview;
+
+  // Nothing to say yet: no reviews and this visitor can't write one → render nothing
+  // (no "From Fellow Sippers" heading, no sign-in prompt, no empty-state copy).
+  if (!loaded || (reviews.length === 0 && !canWrite)) return null;
+
   return (
     <section aria-label="Reviews" className="mx-auto max-w-3xl px-6 py-10">
-      <h2 className="mb-6 text-center font-heading text-3xl font-bold text-darkgreen">From Fellow Sippers</h2>
+      {reviews.length > 0 && (
+        <h2 className="mb-6 text-center font-heading text-3xl font-bold text-darkgreen">From Fellow Sippers</h2>
+      )}
 
-      {authed && canReview ? (
+      {canWrite ? (
         <div className="mb-8 rounded-[22px] bg-white p-5 shadow-lg">
           <div className="mb-3 flex items-center gap-2">
             <span className="font-body text-sm font-bold text-darkgreen">Your rating</span>
@@ -113,24 +120,9 @@ export function ReviewsSection({
             </button>
           </div>
         </div>
-      ) : authed ? (
-        <p className="mb-8 rounded-2xl bg-craemy/25 px-4 py-3 text-center font-body text-sm text-darkgreen">
-          You can review this blend once you&apos;ve received a delivered order of it.
-        </p>
-      ) : (
-        <p className="mb-8 text-center font-body text-sm text-gray-500">
-          <Link href="/login" className="font-bold text-green hover:text-orange">
-            Sign in
-          </Link>{" "}
-          and order this blend to share your own cup.
-        </p>
-      )}
+      ) : null}
 
-      {!loaded ? (
-        <p className="text-center text-gray-400">Loading reviews…</p>
-      ) : reviews.length === 0 ? (
-        <p className="text-center text-gray-500">No reviews yet — be the first to share your ritual.</p>
-      ) : (
+      {reviews.length > 0 && (
         <ul className="space-y-4">
           {reviews.map((r) => (
             <li key={r.id} className="rounded-2xl bg-white p-5 shadow-lg">

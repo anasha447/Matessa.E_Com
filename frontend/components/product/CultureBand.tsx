@@ -13,8 +13,9 @@ export function CultureBand() {
             mixBlendMode: "screen",
           }}
         />
-        <div className="relative flex flex-col items-stretch gap-8 p-8 nav:flex-row nav:items-center nav:gap-12 nav:p-14">
-          <div className="flex-1">
+        {/* video is flush to the card edges — padding lives on the text column only */}
+        <div className="relative flex flex-col items-stretch nav:flex-row nav:items-stretch">
+          <div className="flex-1 p-8 nav:p-14">
             <h2 className="font-heading font-bold text-yellow [font-size:clamp(30px,3.6vw,50px)] leading-[1.14]">
               Good Things Are Growing In The Shade
             </h2>
@@ -33,7 +34,7 @@ export function CultureBand() {
               playsInline
               preload="metadata"
               aria-label="Yerba mate growing in the shade"
-              className="h-full min-h-[300px] w-full rounded-[1.5rem] object-cover shadow-2xl nav:min-h-[460px]"
+              className="h-full min-h-[300px] w-full object-cover nav:min-h-[460px]"
             />
           </div>
         </div>

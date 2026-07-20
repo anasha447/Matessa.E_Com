@@ -15,7 +15,7 @@ export default function ContactPage() {
       <main className="grid min-h-[70svh] place-items-center px-5 py-14">
         <ContactForm />
       </main>
-      <SiteFooter variant="minimal" />
+      <SiteFooter variant="full" />
     </>
   );
 }

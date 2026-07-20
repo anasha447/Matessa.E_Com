@@ -36,6 +36,7 @@ export function DomeGallery() {
   const sphereRef = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -194,7 +195,7 @@ export function DomeGallery() {
           className={`mtsa-dome${zoom ? " mtsa-dome-open" : ""}`}
           // Width-based so the dome is compact on phones and grows on desktop.
           // (svh made it ~750px on a tall phone but only ~735px on a laptop.)
-          style={{ position: "relative", height: "clamp(500px, 68vw, 1120px)" }}
+          style={{ position: "relative", height: "clamp(560px, 60vw, 980px)" }}
         >
           <div
             style={{

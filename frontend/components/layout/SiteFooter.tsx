@@ -126,33 +126,22 @@ export function SiteFooter({
                 <Image src="/brand/full-logo.webp" alt="Matessa mate gourd logo" width={240} height={120} className="h-[104px] w-auto nav:h-[120px]" />
               </div>
               <FooterCol
-                title="Shop"
+                title="Quick Links"
                 links={[
-                  { label: "Masala Mate", href: "/product/masala-mate" },
-                  { label: "Lemon & Ginger", href: "/product/lemon-ginger-mate" },
-                  { label: "Raw Mate", href: "/product/raw-mate" },
-                  { label: "Gourds & Bombillas", href: "/shop" },
-                ]}
-              />
-              <FooterCol
-                title="Explore"
-                links={[
-                  { label: "What is mate?!", href: "/what-is-mate" },
-                  { label: "Health Benefits", href: "/#health" },
+                  { label: "Home", href: "/" },
+                  { label: "Shop", href: "/shop" },
                   { label: "Our Story", href: "/about" },
-                  { label: "Who Drinks Mate?", href: "/#gallery" },
+                  { label: "Contact", href: "/contact" },
                 ]}
               />
               <FooterCol
-                className="col-span-2 nav:col-span-1"
-                title="Support"
+                title="Customer Service"
                 links={[
-                  { label: "Contact Us", href: "/contact" },
-                  { label: "Shipping & Returns", href: "/contact" },
-                  { label: "Wholesale", href: "/contact" },
-                  { label: "FAQ", href: "/product/masala-mate#faq" },
+                  { label: "Privacy Policy", href: "/privacy-policy" },
+                  { label: "Track Order", href: "/track" },
                 ]}
               />
+              <ContactCol className="col-span-2 nav:col-span-1" />
             </div>
             <BottomBar bordered />
           </div>
@@ -181,23 +170,19 @@ function PatternLayer() {
   );
 }
 
+const colTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontFamily: "var(--font-heading)",
+  fontSize: 20,
+  fontWeight: 700,
+  color: "#F3CB57",
+};
+
 function FooterCol({ title, links, className }: { title: string; links: { label: string; href: string }[]; className?: string }) {
   return (
-    <nav aria-label={title} className={className} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <h3
-        style={{
-          margin: 0,
-          fontFamily: "var(--font-body)",
-          fontSize: 13,
-          fontWeight: 700,
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: "#EADBA2",
-        }}
-      >
-        {title}
-      </h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <nav aria-label={title} className={className} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <h3 style={colTitleStyle}>{title}</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {links.map((l) => (
           <Link
             key={l.label}
@@ -210,6 +195,61 @@ function FooterCol({ title, links, className }: { title: string; links: { label:
         ))}
       </div>
     </nav>
+  );
+}
+
+const CONTACT_ICON = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true } as const;
+
+function MailIcon() {
+  return (
+    <svg {...CONTACT_ICON}>
+      <rect x="2.5" y="5" width="19" height="14" rx="2.5" stroke="#F26323" strokeWidth="2" />
+      <path d="M3.5 7l8.5 6 8.5-6" stroke="#F26323" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function PhoneIcon() {
+  return (
+    <svg {...CONTACT_ICON}>
+      <path
+        d="M6.5 3h3l1.5 4-2 1.5a12 12 0 006.5 6.5L17 13l4 1.5v3a2 2 0 01-2.2 2A17 17 0 013.5 5.2 2 2 0 015.5 3z"
+        stroke="#F26323"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function PinIcon() {
+  return (
+    <svg {...CONTACT_ICON}>
+      <path d="M12 21s7-5.5 7-11a7 7 0 10-14 0c0 5.5 7 11 7 11z" stroke="#F26323" strokeWidth="2" strokeLinejoin="round" />
+      <circle cx="12" cy="10" r="2.5" stroke="#F26323" strokeWidth="2" />
+    </svg>
+  );
+}
+
+/** Contact column: email / phone / location with orange icons. */
+function ContactCol({ className }: { className?: string }) {
+  const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12 };
+  return (
+    <div className={className} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <h3 style={colTitleStyle}>Contact Us</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <a href="mailto:support@matessa.in" style={{ ...row, ...linkStyle }} className="transition-colors duration-300 hover:!text-orange-hover">
+          <MailIcon />
+          support@matessa.in
+        </a>
+        <a href="tel:+917984191716" style={{ ...row, ...linkStyle }} className="transition-colors duration-300 hover:!text-orange-hover">
+          <PhoneIcon />
+          +91 7984191716
+        </a>
+        <span style={{ ...row, ...linkStyle }}>
+          <PinIcon />
+          Lucknow, India
+        </span>
+      </div>
+    </div>
   );
 }
 

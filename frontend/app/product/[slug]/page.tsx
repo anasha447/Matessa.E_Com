@@ -86,10 +86,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </span>
               </div>
 
-              {product.description && (
-                <p className="mt-4 font-body leading-relaxed text-gray-600">{product.description}</p>
-              )}
-
               <ProductBuyPanel
                 slug={product.slug}
                 productName={product.name}
@@ -97,6 +93,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 variants={product.variants}
                 basePrice={product.price}
               />
+
+              {product.description && (
+                <p className="mt-7 border-t border-gray-200 pt-6 font-body leading-relaxed text-gray-600">
+                  {product.description}
+                </p>
+              )}
             </div>
           </div>
         </div>
