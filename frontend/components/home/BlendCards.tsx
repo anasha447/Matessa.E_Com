@@ -77,7 +77,7 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
   const add = async (b: BlendCardData) => {
     if (b.variantId == null) return;
     try {
-      await addItem(b.variantId, 1);
+      await addItem(b.variantId, 1, { name: b.name, price: b.price, image: b.image });
       setAdded(b.slug);
       setTimeout(() => setAdded(null), 1600);
       open();

@@ -21,10 +21,14 @@ const FLAVOR_LINKS = [
 
 export function ProductBuyPanel({
   slug,
+  productName,
+  image,
   variants,
   basePrice,
 }: {
   slug: string;
+  productName: string;
+  image?: string;
   variants: ProductVariantView[];
   basePrice: number;
 }) {
@@ -43,7 +47,13 @@ export function ProductBuyPanel({
   const add = async () => {
     if (!active) return false;
     try {
-      await addItem(active.id, qty);
+      await addItem(active.id, qty, {
+        name: productName,
+        price: active.price,
+        image,
+        size: active.size ?? undefined,
+        sku: active.sku,
+      });
       return true;
     } catch {
       setNote("Couldn't add to cart — please try again.");

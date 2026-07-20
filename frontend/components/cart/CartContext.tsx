@@ -10,21 +10,45 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "@/lib/api";
-import type { CartResponse } from "@/lib/api";
+import type { CartItem, CartResponse } from "@/lib/api";
 
 export const CART_PLACEHOLDER = "/brand/leaf-pattern-light.webp";
 const GUEST_KEY = "ad_guest_cart";
 
-/** A guest cart line kept in localStorage. Priced on demand via /api/cart/price so
- *  totals stay server-authoritative (never computed client-side). */
-type GuestLine = { productVariantId: number; quantity: number };
+/** Display snapshot captured when an item is added, so the guest cart can render
+ *  (name, price, image, size) without a server round-trip. */
+export interface CartItemMeta {
+  name?: string;
+  price?: number;
+  image?: string;
+  size?: string;
+  sku?: string;
+}
+
+/** A guest cart line kept in localStorage. `/api/cart/price` is still the source of
+ *  truth for totals, but the captured meta lets the drawer show items instantly and
+ *  survive a transient pricing outage instead of looking empty. */
+type GuestLine = { productVariantId: number; quantity: number } & CartItemMeta;
+
+function cleanMeta(meta?: CartItemMeta): CartItemMeta {
+  if (!meta) return {};
+  const out: CartItemMeta = {};
+  if (typeof meta.name === "string") out.name = meta.name;
+  if (typeof meta.price === "number") out.price = meta.price;
+  if (typeof meta.image === "string") out.image = meta.image;
+  if (typeof meta.size === "string") out.size = meta.size;
+  if (typeof meta.sku === "string") out.sku = meta.sku;
+  return out;
+}
 
 function readGuest(): GuestLine[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = JSON.parse(localStorage.getItem(GUEST_KEY) || "[]");
     return Array.isArray(raw)
-      ? raw.filter((l) => l && typeof l.productVariantId === "number" && typeof l.quantity === "number")
+      ? raw
+          .filter((l) => l && typeof l.productVariantId === "number" && typeof l.quantity === "number")
+          .map((l) => ({ productVariantId: l.productVariantId, quantity: l.quantity, ...cleanMeta(l) }))
       : [];
   } catch {
     return [];
@@ -43,6 +67,23 @@ export function clearGuestCart() {
   writeGuest([]);
 }
 const EMPTY_GUEST_CART: CartResponse = { cartId: null, userId: null, items: [], subtotal: 0 };
+
+/** Build a cart from the local guest snapshot (guest items are keyed by variant id,
+ *  matching setQty/removeItem). Prices are best-effort until the server re-prices. */
+function guestCartToResponse(lines: GuestLine[]): CartResponse {
+  const items: CartItem[] = lines.map((l) => ({
+    id: l.productVariantId,
+    productVariantId: l.productVariantId,
+    productName: l.name ?? "Item",
+    sku: l.sku ?? "",
+    unitPrice: l.price ?? 0,
+    quantity: l.quantity,
+    lineTotal: (l.price ?? 0) * l.quantity,
+    available: true,
+    stockQuantity: 99,
+  }));
+  return { cartId: null, userId: null, items, subtotal: items.reduce((s, it) => s + it.lineTotal, 0) };
+}
 
 /** Retry a transient cart call — the gateway circuit breaker briefly 503s cart ops when
  *  order-service GC-pauses; a short retry rides through it instead of erroring the user. */
@@ -70,8 +111,10 @@ interface CartContextValue {
   open: () => void;
   close: () => void;
   refresh: () => Promise<void>;
-  /** Adds to the server cart (signed in) or the local guest cart. Does not open the drawer. */
-  addItem: (productVariantId: number, quantity?: number) => Promise<void>;
+  /** Adds to the server cart (signed in) or the local guest cart. `meta` captures a
+   *  display snapshot so the guest cart renders without/before a server round-trip.
+   *  Does not open the drawer. */
+  addItem: (productVariantId: number, quantity?: number, meta?: CartItemMeta) => Promise<void>;
   setQty: (itemId: number, quantity: number) => Promise<void>;
   removeItem: (itemId: number) => Promise<void>;
 }
@@ -130,15 +173,37 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
     [enrich],
   );
 
-  // Guest cart: re-price the local lines (or show empty). Retries a few times so a
-  // transient gateway hiccup (order-service GC pause → 503) doesn't drop the just-added
-  // item, and on persistent failure keeps whatever is already shown rather than wiping it.
+  // Render the guest cart from the local snapshot — instant, and works with no network.
+  // Seeds images/sizes from the captured meta so the drawer is complete offline.
+  const applyGuestLocal = useCallback((lines: GuestLine[]) => {
+    let seeded = false;
+    for (const l of lines) {
+      if (l.image && !imgCache.current.has(l.productVariantId)) {
+        imgCache.current.set(l.productVariantId, l.image);
+        seeded = true;
+      }
+      if (l.size && !sizeCache.current.has(l.productVariantId)) {
+        sizeCache.current.set(l.productVariantId, l.size);
+        seeded = true;
+      }
+    }
+    if (seeded) {
+      setImages(Object.fromEntries(imgCache.current));
+      setSizes(Object.fromEntries(sizeCache.current));
+    }
+    setCart(guestCartToResponse(lines));
+  }, []);
+
+  // Guest cart: show the local snapshot immediately (so it's never empty right after an
+  // add), then upgrade to server-authoritative pricing when the gateway is reachable.
+  // A transient 503 (order-service GC pause) just leaves the local snapshot in place.
   const priceGuest = useCallback(async () => {
     const lines = readGuest();
     if (lines.length === 0) {
       setCart(EMPTY_GUEST_CART);
       return;
     }
+    applyGuestLocal(lines);
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         await apply(await api.cart.price(lines));
@@ -147,8 +212,8 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
         if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
       }
     }
-    setCart((prev) => (prev && prev.items.length > 0 ? prev : EMPTY_GUEST_CART));
-  }, [apply]);
+    // server unavailable — keep the local snapshot already shown
+  }, [apply, applyGuestLocal]);
 
   const refresh = useCallback(async () => {
     if (authed) {
@@ -195,15 +260,19 @@ export function CartProvider({ children, authed }: { children: ReactNode; authed
   }, [authed]);
 
   const addItem = useCallback(
-    async (productVariantId: number, quantity = 1) => {
+    async (productVariantId: number, quantity = 1, meta?: CartItemMeta) => {
       if (authed) {
         await apply(await withRetry(() => api.cart.addItem({ productVariantId, quantity })));
         return;
       }
       const lines = readGuest();
       const existing = lines.find((l) => l.productVariantId === productVariantId);
-      if (existing) existing.quantity += quantity;
-      else lines.push({ productVariantId, quantity });
+      if (existing) {
+        existing.quantity += quantity;
+        Object.assign(existing, cleanMeta(meta)); // refresh the display snapshot
+      } else {
+        lines.push({ productVariantId, quantity, ...cleanMeta(meta) });
+      }
       writeGuest(lines);
       await priceGuest();
     },

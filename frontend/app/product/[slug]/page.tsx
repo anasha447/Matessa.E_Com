@@ -90,7 +90,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <p className="mt-4 font-body leading-relaxed text-gray-600">{product.description}</p>
               )}
 
-              <ProductBuyPanel slug={product.slug} variants={product.variants} basePrice={product.price} />
+              <ProductBuyPanel
+                slug={product.slug}
+                productName={product.name}
+                image={product.images[0]?.url}
+                variants={product.variants}
+                basePrice={product.price}
+              />
             </div>
           </div>
         </div>
