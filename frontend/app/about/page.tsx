@@ -36,7 +36,7 @@ const CHAPTERS = [
 export default function AboutPage() {
   return (
     <>
-      <SiteHeader variant="overlay" />
+      <SiteHeader />
       <main>
         {/* Banner */}
         <section className="relative grid min-h-[70svh] place-items-center overflow-hidden">

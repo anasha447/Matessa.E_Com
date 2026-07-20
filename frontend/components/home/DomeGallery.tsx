@@ -192,7 +192,9 @@ export function DomeGallery() {
         <div
           ref={rootRef}
           className={`mtsa-dome${zoom ? " mtsa-dome-open" : ""}`}
-          style={{ position: "relative", height: "clamp(500px, 92svh, 960px)" }}
+          // Width-based so the dome is compact on phones and grows on desktop.
+          // (svh made it ~750px on a tall phone but only ~735px on a laptop.)
+          style={{ position: "relative", height: "clamp(500px, 68vw, 1120px)" }}
         >
           <div
             style={{
