@@ -15,7 +15,7 @@ export default function LoginPage() {
           <AuthForm />
         </Suspense>
       </main>
-      <SiteFooter variant="minimal" />
+      <SiteFooter variant="full" />
     </>
   );
 }

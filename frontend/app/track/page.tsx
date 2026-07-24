@@ -15,7 +15,7 @@ export default function TrackPage() {
           <TrackView />
         </Suspense>
       </main>
-      <SiteFooter variant="minimal" />
+      <SiteFooter variant="full" />
     </>
   );
 }

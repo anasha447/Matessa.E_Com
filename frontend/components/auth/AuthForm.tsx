@@ -5,8 +5,6 @@
 // (staff → /admin, customer → /account) unless ?next overrides. A provisioned manager
 // with a temp password is forced through a password change first.
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart } from "@/components/cart/CartContext";
 import { ForcePasswordChange } from "./ForcePasswordChange";
@@ -27,6 +25,7 @@ export function AuthForm() {
   const [forceChange, setForceChange] = useState<{ current: string; dest: string } | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (params.get("mode") === "register") setMode("register");
   }, [params]);
 
@@ -80,15 +79,10 @@ export function AuthForm() {
   return (
     <>
       <div className="mx-auto w-full max-w-md rounded-[24px] bg-white p-7 shadow-lg">
-        <Link href="/" aria-label="Matessa home" className="mx-auto mb-5 block w-fit">
-          <Image src="/brand/logo.webp" alt="Matessa" width={130} height={46} className="h-[46px] w-auto [filter:brightness(0.62)_sepia(0.35)]" />
-        </Link>
-        <h1 className="text-center font-heading text-2xl font-bold text-darkgreen">
+        <h1 className="text-center font-heading text-2xl font-bold text-darkgreen mb-5">
           {mode === "login" ? "Welcome back" : "Create your account"}
         </h1>
-        <p className="mb-6 mt-1 text-center font-body text-sm text-gray-500">
-          {mode === "login" ? "Sign in to continue your ritual." : "Join Matessa — a sip from nature."}
-        </p>
+
 
         {/* Tabs */}
         <div className="mb-6 flex rounded-full bg-gray-100 p-1">
