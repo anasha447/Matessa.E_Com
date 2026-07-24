@@ -1,10 +1,11 @@
 # Matessa — e-commerce stack (isolated sibling of the Adventure Dose project)
-# Boots: eureka-server (service discovery) + users-db (Postgres for user-service).
-# Add commercial-db, orders-db, kafka, redis here as you build the services that need them.
+# 8 containers: eureka-server, one shared Postgres (matessa-db: 3 isolated databases),
+# user/commercial/order services, api-gateway, kafka, redis. Tracing (Tempo + Grafana)
+# was removed to save memory; re-enable per the note near the bottom of this file.
 #
-# Host ports are deliberately offset (9xxx / 55xx / 6380 / 3002 / 3201) so this stack can run
-# side-by-side with the original Adventure Dose containers (8xxx / 54xx / 6379 / 3001 / 3200)
-# on the same host. Inside the network, every service still listens on its conventional port.
+# Host ports are deliberately offset (9xxx / 5533 / 6380) so this stack can run side-by-side
+# with the original Adventure Dose containers on the same host. Inside the network, every
+# service still listens on its conventional port.
 #
 # Run:    docker compose up -d
 # Stop:   docker compose down
@@ -37,18 +38,27 @@ services:
       retries: 10
       start_period: 60s        # give Eureka time to boot (JVM + registry) before counting failures
 
-  # ---- user-service database ----
-  users-db:
+  # ---- shared Postgres: ONE server, three isolated databases ----
+  # Consolidated from three postgres containers to cut memory/CPU on a small host.
+  # `users` is created by the POSTGRES_* env below; `commercial` + `orders` (each with
+  # its own owning role) are created on first boot by backend/db-init/init-multi-db.sh.
+  # Still database-per-service: separate DBs + separate credentials, no cross-DB joins.
+  matessa-db:
     image: postgres:16-alpine
-    container_name: matessa-users-db
+    container_name: matessa-db
     environment:
       POSTGRES_DB: users
-      POSTGRES_USER: ${USERS_DB_USER}        # set in .env (never hard-code)
+      POSTGRES_USER: ${USERS_DB_USER}          # bootstrap superuser + owner of `users`
       POSTGRES_PASSWORD: ${USERS_DB_PASSWORD}
+      COMMERCIAL_DB_USER: ${COMMERCIAL_DB_USER}   # consumed by the init script
+      COMMERCIAL_DB_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
+      ORDERS_DB_USER: ${ORDERS_DB_USER}
+      ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD}
     ports:
-      - "5533:5432"           # host 5533 -> container 5432 (original stack owns 5433)
+      - "5533:5432"           # host 5533 -> all three DBs (connect by db name)
     volumes:
-      - matessa-users-db-data:/var/lib/postgresql/data
+      - matessa-db-data:/var/lib/postgresql/data
+      - ./backend/db-init:/docker-entrypoint-initdb.d:ro   # runs once on an empty volume
     networks:
       - matessa-net
     healthcheck:
@@ -56,6 +66,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s        # first boot also runs the multi-db init script
 
   # ---- user-service (identity & RS256 auth) ----
   user-service:
@@ -63,9 +74,10 @@ services:
     container_name: matessa-user-service
     environment:
       SERVER_PORT: 8081
-      SPRING_DATASOURCE_URL: jdbc:postgresql://users-db:5432/users   # service NAME, internal port
+      SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/users   # shared server, `users` db
       SPRING_DATASOURCE_USERNAME: ${USERS_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${USERS_DB_PASSWORD}
+      TRACING_SAMPLING: "0"        # tracing off (Tempo removed) — no OTLP export attempts
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"   # register the bridge IP so lb:// is reachable across the compose network
       # Faster discovery both ways: heartbeat every 5s, expire in 15s, refetch registry every 5s.
@@ -84,7 +96,7 @@ services:
     volumes:
       - ./keys:/app/keys:ro          # RS256 keys mounted read-only (gitignored, never baked into the image)
     depends_on:
-      users-db:
+      matessa-db:
         condition: service_healthy   # waits for DB readiness, not just start
       eureka-server:
         condition: service_started   # start-only: the Eureka client retries registration,
@@ -117,6 +129,7 @@ services:
       ORDER_SERVICE_URI: lb://order-service
       JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem   # gateway holds the PUBLIC key only
       REDIS_HOST: redis                         # Phase 4: edge rate limiting
+      TRACING_SAMPLING: "0"                     # tracing off (Tempo removed)
       # -XX:TieredStopAtLevel=1 → C1-only JIT for a much faster cold start (dev priority).
       JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -XX:TieredStopAtLevel=1 -Xmx320m"
     volumes:
@@ -136,26 +149,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # ---- commercial-service database ----
-  commercial-db:
-    image: postgres:16-alpine
-    container_name: matessa-commercial-db
-    environment:
-      POSTGRES_DB: commercial
-      POSTGRES_USER: ${COMMERCIAL_DB_USER}
-      POSTGRES_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
-    ports:
-      - "5534:5432"           # host 5534 -> container 5432 (offset from users-db)
-    volumes:
-      - matessa-commercial-db-data:/var/lib/postgresql/data
-    networks:
-      - matessa-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${COMMERCIAL_DB_USER} -d commercial"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ---- commercial-service (catalog & inventory) ----
   # Single instance on a fixed port for dev convenience. Eureka + lb:// still balance across
   # replicas if you scale it: remove container_name + the ports mapping, then
@@ -165,9 +158,10 @@ services:
     container_name: matessa-commercial-service
     environment:
       SERVER_PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://commercial-db:5432/commercial
+      SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/commercial   # shared server, `commercial` db
       SPRING_DATASOURCE_USERNAME: ${COMMERCIAL_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
+      TRACING_SAMPLING: "0"        # tracing off (Tempo removed)
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"   # register the bridge IP so lb:// is reachable
       EUREKA_INSTANCE_LEASE_RENEWAL_INTERVAL_IN_SECONDS: "5"
@@ -186,7 +180,7 @@ services:
       - ./keys:/app/keys:ro
       - matessa-commercial-media:/app/media             # WebP uploads survive rebuilds
     depends_on:
-      commercial-db:
+      matessa-db:
         condition: service_healthy
       eureka-server:
         condition: service_started   # start-only: the Eureka client retries registration,
@@ -228,35 +222,16 @@ services:
       retries: 10
       start_period: 30s
 
-  # ---- order-service database ----
-  orders-db:
-    image: postgres:16-alpine
-    container_name: matessa-orders-db
-    environment:
-      POSTGRES_DB: orders
-      POSTGRES_USER: ${ORDERS_DB_USER}
-      POSTGRES_PASSWORD: ${ORDERS_DB_PASSWORD}
-    ports:
-      - "5535:5432"           # host 5535 -> container 5432 (offset from commercial-db)
-    volumes:
-      - matessa-orders-db-data:/var/lib/postgresql/data
-    networks:
-      - matessa-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${ORDERS_DB_USER} -d orders"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ---- order-service (cart, checkout, orders) ----
   order-service:
     build: ./backend/order-service
     container_name: matessa-order-service
     environment:
       SERVER_PORT: 8083
-      SPRING_DATASOURCE_URL: jdbc:postgresql://orders-db:5432/orders   # service NAME, internal port
+      SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/orders   # shared server, `orders` db
       SPRING_DATASOURCE_USERNAME: ${ORDERS_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ORDERS_DB_PASSWORD}
+      TRACING_SAMPLING: "0"        # tracing off (Tempo removed)
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
       EUREKA_INSTANCE_LEASE_RENEWAL_INTERVAL_IN_SECONDS: "5"
@@ -274,7 +249,7 @@ services:
     volumes:
       - ./keys:/app/keys:ro
     depends_on:
-      orders-db:
+      matessa-db:
         condition: service_healthy
       eureka-server:
         condition: service_started   # start-only: the Eureka client retries registration,
@@ -305,42 +280,13 @@ services:
       timeout: 3s
       retries: 5
 
-  # ---- Tempo: receives OTLP traces from the services, queried by Grafana ----
-  tempo:
-    image: grafana/tempo:2.6.1
-    container_name: matessa-tempo
-    command: ["-config.file=/etc/tempo.yaml"]
-    volumes:
-      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
-      - matessa-tempo-data:/var/tempo
-    ports:
-      - "3201:3200"           # Tempo query API (Grafana datasource)
-    networks:
-      - matessa-net
-
-  # ---- Grafana: view distributed traces (anonymous admin, dev only) ----
-  grafana:
-    image: grafana/grafana:11.3.0
-    container_name: matessa-grafana
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
-    volumes:
-      - ./observability/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    ports:
-      - "3002:3000"           # host 3002 (original stack owns 3001; Next dev owns 3000/3100) -> Grafana UI
-    networks:
-      - matessa-net
-    depends_on:
-      - tempo
+  # Tracing stack (Tempo + Grafana) removed to free memory/CPU on a small host.
+  # Tracing is disabled in the services via TRACING_SAMPLING=0. To bring it back, restore
+  # the two service blocks + the matessa-tempo-data volume and drop the sampling override.
 
 volumes:
-  matessa-users-db-data:                # named volume so DB data survives restarts
-  matessa-commercial-db-data:
-  matessa-orders-db-data:
+  matessa-db-data:                      # single Postgres server, three databases inside
   matessa-commercial-media:             # uploaded product images (WebP)
-  matessa-tempo-data:                   # trace blocks/WAL (dev retention only)
 
 networks:
   matessa-net:                # private network; only this project's containers join
