@@ -13,6 +13,7 @@ import {
   type HeatCell,
 } from "@/components/admin/ui";
 import { TrendChart } from "@/components/admin/TrendChart";
+import { OrdersOverTimeChart } from "@/components/admin/OrdersOverTimeChart";
 import { IndiaOrdersMap } from "@/components/admin/IndiaOrdersMap";
 import { orderStatusLabel } from "@/lib/utils/orderStatus";
 import { icons } from "@/components/admin/icons";
@@ -34,7 +35,7 @@ const monthShort = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1] ?? ym;
 export default async function AdminDashboardPage() {
   const user = await getCurrentUser();
   const isAdmin = user?.roles.includes("ADMIN") ?? false;
-  const { sales, catalog, trend, topProducts, topCustomers, customers, ordersByState } =
+  const { sales, catalog, trend, topProducts, topCustomers, customers, ordersByState, orderTimestamps } =
     await getDashboardData(isAdmin);
 
   if (!sales || !catalog) {
@@ -58,12 +59,10 @@ export default async function AdminDashboardPage() {
     color: ["#3E5F2D", "#7A9D3E", "#F26323"][i % 3],
   }));
 
-  // Gauges — fulfilment rate, dispatch SLA (avg hours to ship), month-over-month growth.
+  // Gauges — fulfilment rate + month-over-month growth.
   const delivered = sales.ordersByStatus.DELIVERED ?? 0;
   const cancelled = sales.ordersByStatus.CANCELLED ?? 0;
   const fulfilRate = delivered / Math.max(1, sales.totalOrders - cancelled);
-  const shipH = sales.operations.avgHoursToShip ?? 0;
-  const shipColor = shipH <= 24 ? "#3F8F5B" : shipH <= 48 ? "#E0A92E" : "#D24B3E";
   // monthOverMonthPct is null when there's no prior-month baseline.
   const momRaw = sales.revenue.monthOverMonthPct;
   const mom = momRaw ?? 0;
@@ -90,7 +89,6 @@ export default async function AdminDashboardPage() {
         <KpiCard label="Revenue · today" value={sales.revenue.today} money sub={`week ${formatMoney(sales.revenue.thisWeek)}`} />
         <KpiCard label="Revenue · this year" value={sales.revenue.thisYear} money sub={`all time ${formatMoney(sales.revenue.allTime)}`} />
         <KpiCard label="Total orders" value={sales.totalOrders} sub={`AOV ${formatMoney(sales.averageOrderValue)}`} />
-        <KpiCard label="Refunds" value={sales.refunds.amount} money sub={`${sales.refunds.count} refunds`} />
       </div>
 
       <div className="card">
@@ -101,7 +99,6 @@ export default async function AdminDashboardPage() {
         <div className="card-body">
           <div className="gauge-row">
             <Gauge value={fulfilRate} max={1} display={`${Math.round(fulfilRate * 100)}%`} label="Delivered rate" color="#3F8F5B" />
-            <Gauge value={Math.min(shipH, 72)} max={72} display={`${shipH}h`} label="Avg to dispatch" color={shipColor} />
             <Gauge value={momFrac} max={1} display={momDisplay} label="MoM growth" color={momColor} />
           </div>
         </div>
@@ -110,7 +107,7 @@ export default async function AdminDashboardPage() {
       <div className="card">
         <div className="card-head">
           <h3>Ops queue</h3>
-          <span className="sub">avg {sales.operations.avgHoursToShip}h to dispatch</span>
+          <span className="sub">needs action</span>
         </div>
         <div className="card-body">
           <div className="ops-queue">
@@ -131,6 +128,16 @@ export default async function AdminDashboardPage() {
               {icons.arrowR}
             </Link>
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h3>Orders over time</h3>
+          <span className="sub">week · month · 6 months · year</span>
+        </div>
+        <div className="card-body">
+          <OrdersOverTimeChart timestamps={orderTimestamps} />
         </div>
       </div>
 

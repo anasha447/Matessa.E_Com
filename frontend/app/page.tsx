@@ -37,10 +37,15 @@ async function getBlends(): Promise<BlendCardData[]> {
     return await Promise.all(
       page.content.map(async (p): Promise<BlendCardData> => {
         let variantId: number | null = null;
+        let cardPrice = p.basePrice;
         let image = POUCHES[p.slug] ?? "";
         try {
           const variants = await api.variants.listForProduct(p.id);
-          variantId = variants.find((v) => v.active)?.id ?? variants[0]?.id ?? null;
+          const active = variants.filter((v) => v.active);
+          // default quick-add to the 100g pack (fall back to the first available)
+          const chosen = active.find((v) => /100\s*g/i.test(v.size ?? "")) ?? active[0] ?? variants[0] ?? null;
+          variantId = chosen?.id ?? null;
+          if (chosen?.effectivePrice != null) cardPrice = chosen.effectivePrice;
         } catch {
           // quick-add disabled if variants can't load
         }
@@ -52,7 +57,7 @@ async function getBlends(): Promise<BlendCardData[]> {
             image = "/brand/leaf-pattern-light.webp";
           }
         }
-        return { name: p.name, slug: p.slug, price: p.basePrice, image, variantId };
+        return { name: p.name, slug: p.slug, price: cardPrice, image, variantId };
       }),
     );
   } catch {

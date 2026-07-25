@@ -119,11 +119,14 @@ export function SiteFooter({
       <div style={{ background: "#2F3B28" }}>
         <div style={{ padding: "0 clamp(20px, 4vw, 48px) 32px" }}>
           <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(44px, 6vw, 64px)" }}>
-            {/* Mobile: Shop | Explore (2 cols), Support (full row), then the logo.
-                Desktop: logo + three columns in one row. */}
-            <div className="grid grid-cols-2 gap-x-8 gap-y-10 border-t border-white/10 pt-9 nav:grid-cols-[auto_1fr_1fr_1fr] nav:gap-11 nav:pt-12">
-              <div className="order-last col-span-2 flex justify-center pt-2 nav:order-first nav:col-span-1 nav:justify-start nav:pt-0">
-                <Image src="/brand/full-logo.webp" alt="Matessa mate gourd logo" width={240} height={120} className="h-[104px] w-auto nav:h-[120px]" />
+            {/* Mobile: logo centered on top, then Quick Links | Customer Service (2 cols),
+                then Contact full-width. Desktop: four even columns. */}
+            <div className="grid grid-cols-2 gap-x-8 gap-y-11 border-t border-white/10 pt-9 nav:grid-cols-4 nav:gap-9 nav:pt-12">
+              <div className="col-span-2 flex flex-col items-center gap-3 text-center nav:col-span-1 nav:items-start nav:text-left">
+                <Image src="/brand/full-logo.webp" alt="Matessa mate gourd logo" width={220} height={110} className="h-[92px] w-auto nav:h-[104px]" />
+                <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, lineHeight: 1.5, color: "#AEB89E", maxWidth: 220 }}>
+                  Yerba mate for a naturally focused, better lifestyle.
+                </p>
               </div>
               <FooterCol
                 title="Quick Links"

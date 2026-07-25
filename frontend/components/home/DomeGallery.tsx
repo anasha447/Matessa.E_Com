@@ -85,17 +85,18 @@ export function DomeGallery() {
       start = { x: e.clientX, y: e.clientY };
       startRot = { x: target.x, y: target.y };
       lastX = e.clientX; lastY = e.clientY; lastT = performance.now(); vx = 0; vy = 0;
-      try {
-        stage.setPointerCapture(e.pointerId);
-      } catch {
-        // pointer capture is best-effort
-      }
+      // NB: do NOT capture the pointer here — on desktop a captured pointer swallows the
+      // subsequent click, so tapping a tile to zoom never fired. Capture only once a drag
+      // actually starts (below), so a plain click still reaches the tile.
     };
     const move = (e: PointerEvent) => {
       if (!start || !startRot) return;
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
-      if (!moved.current && dx * dx + dy * dy > 36) moved.current = true;
+      if (!moved.current && dx * dx + dy * dy > 36) {
+        moved.current = true;
+        try { stage.setPointerCapture(e.pointerId); } catch { /* best-effort */ }
+      }
       if (!moved.current) return;
       target.x = clampN(startRot.x - dy / 26, -15, 15);
       target.y = startRot.y + dx / 26;

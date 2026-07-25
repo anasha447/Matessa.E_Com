@@ -4,6 +4,8 @@ import { serverGet } from "./session";
 import type {
   CatalogAnalyticsResponse,
   CustomerAnalyticsResponse,
+  OrderSummaryResponse,
+  Page,
   RevenueTrendPoint,
   SalesAnalyticsResponse,
   StateOrderCount,
@@ -19,10 +21,12 @@ export interface DashboardData {
   topCustomers: TopCustomerResponse[];
   customers: CustomerAnalyticsResponse | null;
   ordersByState: StateOrderCount[];
+  /** createdAt ISO strings of recent orders — feeds the client-side "orders over time" chart. */
+  orderTimestamps: string[];
 }
 
 export async function getDashboardData(isAdmin: boolean): Promise<DashboardData> {
-  const [sales, catalog, trend, topProducts, topCustomers, customers, ordersByState] = await Promise.all([
+  const [sales, catalog, trend, topProducts, topCustomers, customers, ordersByState, ordersPage] = await Promise.all([
     serverGet<SalesAnalyticsResponse>("/api/analytics/sales"),
     serverGet<CatalogAnalyticsResponse>("/api/analytics/catalog"),
     serverGet<RevenueTrendPoint[]>("/api/analytics/sales/revenue-trend?months=12"),
@@ -30,6 +34,8 @@ export async function getDashboardData(isAdmin: boolean): Promise<DashboardData>
     serverGet<TopCustomerResponse[]>("/api/analytics/sales/top-customers?limit=5"),
     isAdmin ? serverGet<CustomerAnalyticsResponse>("/api/analytics/customers") : Promise.resolve(null),
     serverGet<StateOrderCount[]>("/api/analytics/sales/orders-by-state"),
+    // recent orders (createdAt only) for the over-time chart; bucketed client-side by period
+    serverGet<Page<OrderSummaryResponse>>("/api/orders/admin?size=1000&sort=createdAt,desc"),
   ]);
 
   return {
@@ -40,5 +46,6 @@ export async function getDashboardData(isAdmin: boolean): Promise<DashboardData>
     topCustomers: topCustomers ?? [],
     customers,
     ordersByState: ordersByState ?? [],
+    orderTimestamps: (ordersPage?.content ?? []).map((o) => o.createdAt),
   };
 }

@@ -35,7 +35,9 @@ export function ProductBuyPanel({
   const router = useRouter();
   const { addItem, open } = useCart();
   const sized = variants.filter((v) => v.available);
-  const [variantId, setVariantId] = useState<number | null>(sized[0]?.id ?? null);
+  // default the selected size to the 100g pack (fall back to the first available)
+  const default100 = sized.find((v) => /100\s*g/i.test(v.size ?? "")) ?? sized[0];
+  const [variantId, setVariantId] = useState<number | null>(default100?.id ?? null);
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState<"add" | "buy" | null>(null);
   const [note, setNote] = useState<string | null>(null);

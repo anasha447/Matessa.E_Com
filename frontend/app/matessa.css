@@ -243,5 +243,6 @@
 /* Photo lightbox: fixed full-screen, real color, click anywhere closes. */
 .mtsa-dome-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 5vh 5vw; background: rgba(15,20,10,0.72); opacity: 0; pointer-events: none; transition: opacity 0.3s ease; cursor: zoom-out; backdrop-filter: blur(4px); }
 .mtsa-dome-open .mtsa-dome-overlay { opacity: 1; pointer-events: auto; }
-.mtsa-dome-overlay img { max-width: min(92vw, 640px); max-height: 86vh; width: auto; height: auto; border-radius: 20px; object-fit: contain; filter: none; box-shadow: 0 30px 70px rgba(0,0,0,0.55); transform: scale(0.94); transition: transform 0.3s ease; }
+.mtsa-dome-overlay img { max-width: min(92vw, 760px); max-height: 88vh; width: auto; height: auto; border-radius: 20px; object-fit: contain; filter: none; box-shadow: 0 30px 70px rgba(0,0,0,0.55); transform: scale(0.94); transition: transform 0.3s ease; }
+@media (min-width: 1024px) { .mtsa-dome-overlay img { max-width: min(70vw, 820px); } }
 .mtsa-dome-open .mtsa-dome-overlay img { transform: scale(1); }
