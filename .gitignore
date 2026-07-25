@@ -66,3 +66,4 @@ coverage/
 
 # ===== Design source (Claude Design export — reference only, not shipped) =====
 design-source/
+db-backups/
