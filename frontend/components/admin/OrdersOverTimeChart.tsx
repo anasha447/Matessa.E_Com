@@ -80,10 +80,19 @@ export function OrdersOverTimeChart({ timestamps }: { timestamps: string[] }) {
   const padB = 26;
   const n = buckets.length;
   const bandW = (W - padL - padR) / n;
-  const barW = Math.max(3, Math.min(bandW * 0.62, 46));
+  const baseY = H - padB;
   const y = (v: number) => padT + (1 - v / (max * 1.1)) * (H - padT - padB);
   // for dense daily views, only label a few ticks
   const labelEvery = n > 14 ? Math.ceil(n / 8) : 1;
+  const dotR = n > 20 ? 2.5 : n > 10 ? 3.2 : 4.2;
+
+  // Line-chart geometry: one point per bucket, joined by straight segments that rise and
+  // fall between the dots, with a soft area fill dropping to the baseline.
+  const pts = buckets.map((b, i) => ({ x: padL + i * bandW + bandW / 2, cy: y(b.count) }));
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.cy.toFixed(1)}`).join(" ");
+  const areaPath = pts.length
+    ? `M ${pts[0].x.toFixed(1)} ${baseY} ${pts.map((p) => `L ${p.x.toFixed(1)} ${p.cy.toFixed(1)}`).join(" ")} L ${pts[pts.length - 1].x.toFixed(1)} ${baseY} Z`
+    : "";
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = wrapRef.current?.getBoundingClientRect();
@@ -121,11 +130,18 @@ export function OrdersOverTimeChart({ timestamps }: { timestamps: string[] }) {
       ) : (
         <div ref={wrapRef} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setTip(null)}>
           <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }} role="img" aria-label={`Orders over the selected ${period}`}>
+            <defs>
+              <linearGradient id="mtsa-oot-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
             {Array.from({ length: 4 }, (_, i) => {
               const gy = padT + (i / 3) * (H - padT - padB);
               const val = Math.round(max * 1.1 * (1 - i / 3));
               return (
-                <g key={i}>
+                <g key={`g${i}`}>
                   <line x1={padL} x2={W - padR} y1={gy} y2={gy} stroke="currentColor" opacity=".09" strokeWidth="1" />
                   <text x={padL - 7} y={gy + 4} textAnchor="end" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor" opacity=".5">
                     {val}
@@ -133,26 +149,38 @@ export function OrdersOverTimeChart({ timestamps }: { timestamps: string[] }) {
                 </g>
               );
             })}
+
+            {/* soft fill under the trend, then the line that connects the dots */}
+            {areaPath && <path d={areaPath} fill="url(#mtsa-oot-fill)" />}
+            <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
+
+            {/* dashed guide down to the hovered point */}
+            {tip && (
+              <line x1={pts[tip.i].x} x2={pts[tip.i].x} y1={padT} y2={baseY} stroke="var(--accent-hover)" strokeWidth="1" strokeDasharray="3 3" opacity=".4" />
+            )}
+
+            {/* x-axis labels (sparse on dense daily views) */}
+            {buckets.map((b, i) =>
+              i % labelEvery === 0 ? (
+                <text key={`x${i}`} x={pts[i].x} y={H - 8} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fill="currentColor" opacity=".5">
+                  {b.label}
+                </text>
+              ) : null,
+            )}
+
+            {/* a dot on every data point */}
             {buckets.map((b, i) => {
-              const cx = padL + i * bandW + bandW / 2;
-              const by = y(b.count);
               const active = tip?.i === i;
               return (
-                <g key={i}>
-                  <rect
-                    x={cx - barW / 2}
-                    y={by}
-                    width={barW}
-                    height={Math.max(0, H - padB - by)}
-                    rx={Math.min(3, barW / 2)}
-                    fill={active ? "var(--accent-hover)" : "var(--accent)"}
-                  />
-                  {i % labelEvery === 0 && (
-                    <text x={cx} y={H - 8} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fill="currentColor" opacity=".5">
-                      {b.label}
-                    </text>
-                  )}
-                </g>
+                <circle
+                  key={`d${i}`}
+                  cx={pts[i].x}
+                  cy={pts[i].cy}
+                  r={active ? dotR + 2.4 : dotR}
+                  fill={active ? "var(--accent-hover)" : "var(--accent)"}
+                  stroke="var(--bg-surface)"
+                  strokeWidth={active ? 2.5 : 1.4}
+                />
               );
             })}
           </svg>
