@@ -280,6 +280,35 @@ services:
       timeout: 3s
       retries: 5
 
+  # ---- frontend (Next.js storefront) — the PUBLIC entry point ----
+  # PROD ONLY: guarded by the "prod" profile so day-to-day dev (`next dev` on the host,
+  # port 3100) is untouched. Start the whole deployable stack with:
+  #     docker compose --profile prod up -d --build
+  # The browser talks only to this container (same-origin /api/bff); it calls the gateway
+  # server-side over the internal network, so the gateway need not be publicly exposed.
+  frontend:
+    build: ./frontend
+    container_name: matessa-frontend
+    profiles: ["prod"]
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      API_GATEWAY_URL: http://api-gateway:8080   # internal service name; server-side calls + /media proxy
+    ports:
+      - "3100:3100"                               # put a TLS reverse proxy (Caddy/nginx/Traefik) in front for prod
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
   # Tracing stack (Tempo + Grafana) removed to free memory/CPU on a small host.
   # Tracing is disabled in the services via TRACING_SAMPLING=0. To bring it back, restore
   # the two service blocks + the matessa-tempo-data volume and drop the sampling override.

@@ -3,9 +3,10 @@
 // "Covering All Aspects of Health" — faithful port of Matessa Landing v4 §After-Banner.
 // Four orange focus words cycle every 1.5s; the corner-bracket reticle is measured to
 // the active word's exact rect (brackets protrude via their own -6/-9px offsets).
-// Inactive words blur(4px) + dim. CTAs: Try Now → #shop, Don't know Mate?! → #benefits.
+// Inactive words blur(4px) + dim. CTAs: Try Now → /shop, Don't know Mate?! → /what-is-mate.
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Reveal } from "@/components/Reveal";
 
 const WORDS = ["Energy", "Focus", "Gut Health", "Immunity"];
@@ -193,8 +194,8 @@ export function HealthFocus() {
 
         <Reveal delay={300}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 6 }}>
-            <a
-              href="#shop"
+            <Link
+              href="/shop"
               className="transition-all duration-300 hover:-translate-y-[3px] hover:bg-orange-hover"
               style={{
                 fontFamily: "var(--font-body)",
@@ -210,9 +211,9 @@ export function HealthFocus() {
               }}
             >
               Try Now
-            </a>
-            <a
-              href="#benefits"
+            </Link>
+            <Link
+              href="/what-is-mate"
               className="transition-all duration-300 hover:-translate-y-[3px] hover:bg-darkgreen/5"
               style={{
                 fontFamily: "var(--font-body)",
@@ -228,7 +229,7 @@ export function HealthFocus() {
               }}
             >
               Don&apos;t know Mate?!
-            </a>
+            </Link>
           </div>
         </Reveal>
       </div>

@@ -16,8 +16,8 @@ spring:
       max-file-size: 8MB       # matches the 8 MB cap enforced in WebpImageStorageService
       max-request-size: 10MB
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5534/commercial}   # host-mapped commercial-db port for local run
-    username: ${SPRING_DATASOURCE_USERNAME:adventure_commercial}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5533/commercial}   # matessa-db host port (5533), 'commercial' database
+    username: ${SPRING_DATASOURCE_USERNAME:matessa_commercial}
     password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
   jpa:
     hibernate:

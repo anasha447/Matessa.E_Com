@@ -5,8 +5,8 @@ spring:
   application:
     name: user-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5533/users}   # host-mapped users-db port for local run
-    username: ${SPRING_DATASOURCE_USERNAME:adventure_user}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5533/users}   # matessa-db host port (5533), 'users' database
+    username: ${SPRING_DATASOURCE_USERNAME:matessa_user}
     password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
   jpa:
     hibernate:

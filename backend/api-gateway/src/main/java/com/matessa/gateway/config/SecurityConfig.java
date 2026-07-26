@@ -64,10 +64,17 @@ public class SecurityConfig {
         }
     }
 
+    /**
+     * CORS is normally a no-op here: the browser calls the Next.js BFF (same origin) and only
+     * the server calls the gateway. It stays configurable so a direct browser→gateway origin
+     * (if ever exposed) is correct per environment. Set CORS_ALLOWED_ORIGINS (comma-separated)
+     * in production; defaults to the local Next dev origin (:3100).
+     */
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${CORS_ALLOWED_ORIGINS:http://localhost:3100}") String allowedOrigins) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000")); // Next.js dev origin
+        config.setAllowedOrigins(List.of(allowedOrigins.split("\\s*,\\s*")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

@@ -9,8 +9,8 @@ spring:
       circuitbreaker:
         enabled: true       # wrap Feign calls in a Resilience4j circuit breaker
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5535/orders}   # host-mapped orders-db port for local run
-    username: ${SPRING_DATASOURCE_USERNAME:adventure_order}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5533/orders}   # matessa-db host port (5533), 'orders' database
+    username: ${SPRING_DATASOURCE_USERNAME:matessa_order}
     password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
   jpa:
     hibernate:
