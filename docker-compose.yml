@@ -309,6 +309,32 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  # ---- pgAdmin (web DB admin) — LOCAL TOOL ONLY, never deployed ----
+  # Guarded by the "tools" profile so it never starts in dev (`up -d`) or prod
+  # (`--profile prod`). Start it on demand with:
+  #     docker compose --profile tools up -d pgadmin
+  # then open http://localhost:5050 and log in (email/password below). When registering
+  # the database inside pgAdmin, use the INTERNAL network address — NOT localhost:5533 —
+  # because pgAdmin runs in a container on the same Docker network:
+  #     Host=matessa-db  Port=5432  User=matessa_user  Password=Mat3ssa_users_dev_pw
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: matessa-pgadmin
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@matessa.com    # pgAdmin login (rejects .local/reserved domains)
+      PGADMIN_DEFAULT_PASSWORD: pgadmin
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"   # local convenience: no extra master password
+    ports:
+      - "5050:80"           # web UI at http://localhost:5050
+    volumes:
+      - matessa-pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      matessa-db:
+        condition: service_healthy
+    networks:
+      - matessa-net
+
   # Tracing stack (Tempo + Grafana) removed to free memory/CPU on a small host.
   # Tracing is disabled in the services via TRACING_SAMPLING=0. To bring it back, restore
   # the two service blocks + the matessa-tempo-data volume and drop the sampling override.
@@ -316,6 +342,7 @@ services:
 volumes:
   matessa-db-data:                      # single Postgres server, three databases inside
   matessa-commercial-media:             # uploaded product images (WebP)
+  matessa-pgadmin-data:                 # pgAdmin settings/registrations (local 'tools' profile only)
 
 networks:
   matessa-net:                # private network; only this project's containers join
