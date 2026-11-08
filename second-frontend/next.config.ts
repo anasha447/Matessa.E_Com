@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 // Server-side gateway base (same resolution as lib/session/cookies.ts).
 const GATEWAY =
-  process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+  process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:9080";
 
 const nextConfig: NextConfig = {
   output: "standalone", 

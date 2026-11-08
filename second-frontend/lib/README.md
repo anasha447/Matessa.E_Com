@@ -29,7 +29,7 @@ try {
 
 | Path | What |
 |---|---|
-| `api/config.ts` | Gateway base URL (`NEXT_PUBLIC_API_BASE_URL`, default `http://localhost:8080`) |
+| `api/config.ts` | Gateway base URL (`NEXT_PUBLIC_API_BASE_URL`, default `http://localhost:9080`) |
 | `api/http.ts` | fetch transport: auth header, **401→refresh→retry**, JSON, `ApiError` |
 | `api/errors.ts` | `ApiError` with `isValidation/isConflict/…` + `fieldErrors` |
 | `api/query.ts` | query-string builder |

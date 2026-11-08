@@ -4,7 +4,7 @@
 import type { NextResponse } from "next/server";
 
 export const GATEWAY = (
-  process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+  process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:9080"
 ).replace(/\/+$/, "");
 
 export const ACCESS_COOKIE = "ad_access";
