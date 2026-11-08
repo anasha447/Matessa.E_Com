@@ -83,6 +83,11 @@ across a service mesh, event-driven stock handling, and edge rate limiting.
 Host ports are offset so this stack can run alongside another on one machine.
 Container-internal ports keep conventional values (8080–8083, 8761, 5432, 6379).
 
+Only the gateway and the two storefronts are published in deployment. The rest are
+local-development conveniences (Swagger, the Eureka dashboard, `psql`, `redis-cli`) and
+`docker-compose.prod.yml` removes them — otherwise a caller could reach a service
+directly and skip the gateway's CORS and rate limiting.
+
 | Service | Host | Service | Host |
 |---|---|---|---|
 | api-gateway | 9080 | eureka-server | 9761 |
@@ -124,10 +129,12 @@ mkdir -p keys && openssl genpkey -algorithm RSA -out keys/jwt-private.pem -pkeyo
 docker compose up -d
 ```
 
-**Everything, production-style** (builds real images):
+**Everything, production-style** (builds real images, publishes only the public entry
+points — gateway and the two storefronts; the database, Redis, Eureka and the three
+services stay on the internal network):
 
 ```bash
-docker compose --profile prod up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
 ```
 
 **Fast iteration** — runs the JVM services from source with bind mounts and a shared

@@ -1,0 +1,36 @@
+# Deployment override: stop publishing everything except the public entry points.
+#
+# Why: the base docker-compose.yml is a local development descriptor and publishes a host
+# port for each service (Swagger on 9081-9083, Eureka on 9761, Postgres on 5533, Redis on
+# 6380) because that is genuinely useful on a laptop. Those same ports in a deployment put
+# the database and every service on the host interface, letting a caller skip the gateway —
+# and with it CORS and the edge rate limiting. JWT validation still runs in each service, so
+# authorization holds either way, but the throttling does not.
+#
+# This override removes those publications. Only the gateway and the two storefronts stay
+# reachable; everything else is on the internal Docker network only.
+#
+# Usage — this is the deployment command:
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+#
+# Note `!reset` needs Compose v2.24+. The gateway keeps 9080 so a reverse proxy can reach it;
+# bind it to localhost (127.0.0.1:9080:8080) if the proxy runs on the same host.
+
+services:
+  matessa-db:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  eureka-server:
+    ports: !reset []
+
+  user-service:
+    ports: !reset []
+
+  commercial-service:
+    ports: !reset []
+
+  order-service:
+    ports: !reset []
