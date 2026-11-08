@@ -28,21 +28,31 @@ public class RateLimitFilter implements Filter {
 
     private record Rule(String prefix, int limit, int windowSeconds) {}
 
-    // Tightest limits on the most abusable public endpoints (per IP, per window).
+    // Tightest limits on the most abusable public endpoints (per client, per window).
+    // Longest prefix wins, so the list is ordered most-specific first.
     private static final List<Rule> RULES = List.of(
             new Rule("/api/auth/login", 10, 60),
+            // Registration mints an account per call, and refresh takes an opaque token —
+            // both were unthrottled while only /login was covered.
+            new Rule("/api/auth/register", 5, 60),
+            new Rule("/api/auth/refresh", 30, 60),
             new Rule("/api/orders/guest", 5, 60),
             new Rule("/api/orders/track", 20, 60),
             new Rule("/api/cart/price", 60, 60),
+            // Public, and it answers whether a code is valid AND what it is worth, so it was
+            // a free coupon-code oracle to brute-force.
+            new Rule("/api/coupons/validate", 20, 60),
             // public storefront submissions — throttle bot spam (each subscribe also mints a coupon)
             new Rule("/api/contact", 20, 60),
             new Rule("/api/subscribers", 20, 60)
     );
 
     private final StringRedisTemplate redis;
+    private final ClientIpResolver clientIpResolver;
 
-    public RateLimitFilter(StringRedisTemplate redis) {
+    public RateLimitFilter(StringRedisTemplate redis, ClientIpResolver clientIpResolver) {
         this.redis = redis;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Override
@@ -50,7 +60,7 @@ public class RateLimitFilter implements Filter {
             throws IOException, ServletException {
         HttpServletRequest req = (HttpServletRequest) request;
         Rule rule = match(req.getRequestURI());
-        if (rule != null && !allow(rule, clientIp(req))) {
+        if (rule != null && !allow(rule, clientIpResolver.resolve(req))) {
             HttpServletResponse res = (HttpServletResponse) response;
             res.setStatus(429);
             res.setHeader("Retry-After", String.valueOf(rule.windowSeconds()));
@@ -78,18 +88,14 @@ public class RateLimitFilter implements Filter {
         }
     }
 
+    /** Longest matching prefix wins, so a specific rule is never shadowed by a broader one. */
     private Rule match(String uri) {
+        Rule best = null;
         for (Rule r : RULES) {
-            if (uri.startsWith(r.prefix())) return r;
+            if (uri.startsWith(r.prefix()) && (best == null || r.prefix().length() > best.prefix().length())) {
+                best = r;
+            }
         }
-        return null;
-    }
-
-    private String clientIp(HttpServletRequest req) {
-        String xff = req.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        return req.getRemoteAddr();
+        return best;
     }
 }

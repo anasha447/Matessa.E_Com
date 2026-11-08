@@ -27,6 +27,13 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const contentType = req.headers.get("content-type");
   // Forward the client's idempotency key so a retried checkout dedupes at order-service.
   const idempotencyKey = req.headers.get("idempotency-key");
+  // Forward the client address so the gateway can rate-limit per client rather than per BFF
+  // instance. We can only pass on what reached us: a reverse proxy in front of this app has
+  // to set X-Forwarded-For. With nothing in front, this header is absent and the gateway
+  // falls back to this container's address — one shared bucket per storefront. The gateway
+  // only believes the header from trusted peers anyway (see ClientIpResolver), so a browser
+  // setting it directly achieves nothing.
+  const forwardedFor = req.headers.get("x-forwarded-for");
 
   const send = (token?: string) =>
     fetch(target, {
@@ -36,6 +43,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
         ...(rawBody && rawBody.byteLength > 0 && contentType ? { "Content-Type": contentType } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+        ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
       },
       body: rawBody && rawBody.byteLength > 0 ? rawBody : undefined,
       cache: "no-store",
