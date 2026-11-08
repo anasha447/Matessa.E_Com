@@ -91,6 +91,21 @@ Container-internal ports keep conventional values (8080–8083, 8761, 5432, 6379
 | order-service | 9083 | pgAdmin (`tools`) | 5050 |
 | frontend | 3100 | second-frontend | 3000 |
 
+## Prerequisites
+
+- **Docker** with Compose v2 (the only hard requirement — the stack builds and runs
+  entirely in containers).
+- **JDK 25** *if you build the services on the host.* The modules target release 25,
+  so a JDK 21 `JAVA_HOME` fails with `release version 25 not supported` even when
+  `java -version` on your PATH reports 25 — Maven reads `JAVA_HOME`, not the PATH.
+  Check with `mvn -v` and point it at a 25 install if needed:
+  ```bash
+  export JAVA_HOME=/path/to/jdk-25        # Windows: set JAVA_HOME=C:\Program Files\Java\jdk-25
+  ```
+  Building through `docker-compose.dev.yml` avoids this entirely — it uses a
+  `maven:3.9-eclipse-temurin-25` container.
+- **Node 22+** for the two storefronts (`npm`, not pnpm/yarn).
+
 ## Running it
 
 ```bash
