@@ -142,12 +142,25 @@ public class OrderServiceImpl implements OrderService {
 
         // 0) Idempotency fast-return: a repeat with the same key hands back the original order —
         //    no re-price, no second charge, no duplicate row.
+        //
+        //    The key is client-supplied and its unique index is global, so the result MUST be
+        //    re-checked against the caller before the order is handed back. Without that check,
+        //    anyone presenting someone else's key — including an unauthenticated guest-checkout
+        //    caller — receives that order in full: totals, line items, the shipping-address
+        //    snapshot and the payment transaction id.
+        //
+        //    A key that exists but belongs to someone else gets the same 409 as a genuine
+        //    duplicate-key collision further down, so the response cannot be used to probe
+        //    whether a given key exists.
         String idemKey = (idempotencyKey == null || idempotencyKey.isBlank()) ? null : idempotencyKey.trim();
         if (idemKey != null) {
             Optional<Order> existing = orderRepository.findByIdempotencyKey(idemKey);
             if (existing.isPresent()) {
-                return toResponse(existing.get(),
-                        orderItemRepository.findByOrderIdOrderByIdAsc(existing.get().getId()));
+                Order prior = existing.get();
+                if (!isSameRequester(prior, userId, guestEmail)) {
+                    throw new ConflictException("Duplicate order request — idempotency key already used.");
+                }
+                return toResponse(prior, orderItemRepository.findByOrderIdOrderByIdAsc(prior.getId()));
             }
         }
 
@@ -469,5 +482,20 @@ public class OrderServiceImpl implements OrderService {
                 order.getShippingAddressSnapshot(), order.getPaymentStatus(), order.getPaymentMethod(),
                 order.getTransactionId(), order.getShippingStatus(), order.getShippingMethod(),
                 order.getTrackingNumber(), lines, order.getCreatedAt());
+    }
+
+    /** True when {@code order} was placed by the same requester that is now presenting its
+     *  idempotency key. Exactly one of {@code userId}/{@code guestEmail} is set on a checkout,
+     *  and the stored order likewise carries exactly one of them, so a registered caller can
+     *  never match a guest order and vice versa. Guest emails are compared case-insensitively
+     *  because the client controls their casing. */
+    private boolean isSameRequester(Order order, Long userId, String guestEmail) {
+        if (userId != null) {
+            return userId.equals(order.getUserId());
+        }
+        if (guestEmail != null && order.getGuestEmail() != null) {
+            return guestEmail.trim().equalsIgnoreCase(order.getGuestEmail().trim());
+        }
+        return false;
     }
 }
