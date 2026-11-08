@@ -20,4 +20,20 @@ public interface CommercialClient {
     /** Validate a coupon code against a subtotal (checkout). Forwards the caller's JWT. */
     @PostMapping("/api/coupons/validate")
     CouponValidation validateCoupon(@RequestBody CouponValidateRequest request);
+
+    /**
+     * Holds stock for every line and claims one coupon use, in a single transaction on the
+     * commercial side, returning the prices it reserved at. 409 if anything is short.
+     *
+     * <p>This replaces the per-line {@code getVariantPriceStock} loop that used to precede
+     * checkout. That loop only read stock, so nothing stopped two buyers of the last unit from
+     * both passing and both being charged. It was also one round trip per line; this is one
+     * for the whole basket.
+     */
+    @PostMapping("/internal/reservations")
+    ReservationResult reserve(@RequestBody ReservationRequest request);
+
+    /** Hands a reservation back when the order does not complete (e.g. payment declined). */
+    @PostMapping("/internal/reservations/release")
+    void releaseReservation(@RequestBody ReservationRequest request);
 }

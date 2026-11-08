@@ -73,6 +73,11 @@ resilience4j:
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
+        # Business refusals are not failures of commercial-service. A run of out-of-stock
+        # checkouts must not trip the breaker and take the catalog calls down with it.
+        ignore-exceptions:
+          - com.matessa.order.exception.ConflictException
+          - com.matessa.order.exception.BadRequestException
   timelimiter:
     configs:
       default:

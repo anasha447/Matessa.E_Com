@@ -49,9 +49,23 @@ public class OrderEventServiceImpl implements OrderEventService {
         this.objectMapper = objectMapper;
     }
 
-    // Stock changed → drop the (display) variant-list cache so PDP badges refresh. This is the
-    // in-service eviction the isolation rule requires: commercial evicts its own cache in reaction
-    // to the order.placed event it already consumes — order-service never touches this cache.
+    /**
+     * Settles an order whose stock and coupon use were already taken synchronously, during
+     * checkout, by {@link ReservationServiceImpl}.
+     *
+     * <p>This handler used to be where stock was decremented. That made it the second half of
+     * a read-then-write spanning two services and a Kafka hop, with the payment taken in the
+     * middle: every concurrent buyer of the last unit passed the stock read in order-service,
+     * every one of them was charged, and this handler then rejected all but one — so customers
+     * were charged for orders that were immediately cancelled. (The old comment claiming
+     * {@code @Version} prevented that was wrong: optimistic locking only stops a lost update
+     * between two writers here, long after the money moved.)
+     *
+     * <p>Stock is now held before payment, so by the time this event arrives there is nothing
+     * left to decide. What remains is genuinely asynchronous: evict the display cache so stock
+     * badges refresh, and record the event as processed for at-least-once de-duplication. The
+     * compensating direction still does real work — see {@link #handleOrderCancelled}.
+     */
     @Override
     @Transactional
     @CacheEvict(cacheNames = CacheConfig.VARIANT_LIST, allEntries = true)
@@ -59,29 +73,9 @@ public class OrderEventServiceImpl implements OrderEventService {
         if (processedEventRepository.existsById(event.eventId())) {
             return;   // already handled (at-least-once delivery)
         }
-        List<ProductVariant> toDecrement = new ArrayList<>();
-        List<String> shortages = new ArrayList<>();
-        for (OrderPlacedEvent.Line line : event.items()) {
-            ProductVariant variant = variantRepository.findById(line.productVariantId()).orElse(null);
-            if (variant == null || !variant.isActive() || variant.getStockQuantity() < line.quantity()) {
-                shortages.add("variant " + line.productVariantId() + " (need " + line.quantity() + ")");
-            } else {
-                variant.setStockQuantity(variant.getStockQuantity() - line.quantity());
-                toDecrement.add(variant);
-            }
-        }
-
-        if (shortages.isEmpty()) {
-            variantRepository.saveAll(toDecrement);   // @Version guards against concurrent oversell
-            redeemCoupon(event.couponCode());
-            log.info("OrderPlaced {}: decremented {} line(s)", event.orderNumber(), toDecrement.size());
-        } else {
-            String reason = "Insufficient stock for " + String.join(", ", shortages);
-            enqueue(KafkaTopics.ORDER_REJECTED, event.orderNumber(),
-                    new OrderRejectedEvent(UUID.randomUUID().toString(), event.orderNumber(), reason, Instant.now()));
-            log.warn("OrderPlaced {} rejected: {}", event.orderNumber(), reason);
-        }
         markProcessed(event.eventId());
+        log.info("OrderPlaced {}: confirmed ({} line(s) already reserved at checkout)",
+                event.orderNumber(), event.items().size());
     }
 
     @Override
@@ -92,36 +86,28 @@ public class OrderEventServiceImpl implements OrderEventService {
             return;
         }
         for (OrderCancelledEvent.Line line : event.items()) {
-            variantRepository.findById(line.productVariantId()).ifPresent(variant -> {
-                variant.setStockQuantity(variant.getStockQuantity() + line.quantity());
-                variantRepository.save(variant);
-            });
+            // Atomic increment rather than read-modify-write: two cancellations landing at once
+            // would otherwise each read the same starting figure and one increment would be lost.
+            if (variantRepository.releaseStock(line.productVariantId(), line.quantity()) == 0) {
+                log.warn("OrderCancelled {}: variant {} no longer exists, stock not restored",
+                        event.orderNumber(), line.productVariantId());
+            }
         }
         releaseCoupon(event.couponCode());
         markProcessed(event.eventId());
         log.info("OrderCancelled {}: restored stock", event.orderNumber());
     }
 
-    private void redeemCoupon(String code) {
-        if (code == null || code.isBlank()) {
-            return;
-        }
-        couponRepository.findByCode(code).ifPresent(coupon -> {
-            coupon.setUsedCount(coupon.getUsedCount() + 1);
-            couponRepository.save(coupon);
-        });
-    }
-
+    /**
+     * Gives the coupon use back. Atomic, for the same reason as the stock increment above:
+     * the previous read-then-write pair could lose a decrement under concurrency, and it also
+     * had no floor beyond a read-time check, so usedCount could drift.
+     */
     private void releaseCoupon(String code) {
         if (code == null || code.isBlank()) {
             return;
         }
-        couponRepository.findByCode(code).ifPresent(coupon -> {
-            if (coupon.getUsedCount() > 0) {
-                coupon.setUsedCount(coupon.getUsedCount() - 1);
-                couponRepository.save(coupon);
-            }
-        });
+        couponRepository.returnUse(code.trim());
     }
 
     private void enqueue(String eventType, String aggregateId, Object payload) {

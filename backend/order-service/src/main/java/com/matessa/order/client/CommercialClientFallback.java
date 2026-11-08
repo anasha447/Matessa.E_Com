@@ -1,5 +1,7 @@
 package com.matessa.order.client;
 
+import com.matessa.order.exception.BadRequestException;
+import com.matessa.order.exception.ConflictException;
 import com.matessa.order.exception.ServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,19 +25,47 @@ public class CommercialClientFallback implements FallbackFactory<CommercialClien
             @Override
             public VariantPriceStock getVariantPriceStock(Long variantId) {
                 log.warn("commercial-service unavailable for variant {}: {}", variantId, cause.toString());
-                throw unavailable();
+                throw translate(cause);
             }
 
             @Override
             public CouponValidation validateCoupon(CouponValidateRequest request) {
                 log.warn("commercial-service unavailable validating coupon {}: {}",
                         request == null ? null : request.code(), cause.toString());
-                throw unavailable();
+                throw translate(cause);
+            }
+
+            @Override
+            public ReservationResult reserve(ReservationRequest request) {
+                log.warn("commercial-service unavailable reserving {} line(s): {}",
+                        request == null || request.items() == null ? 0 : request.items().size(),
+                        cause.toString());
+                throw translate(cause);
+            }
+
+            @Override
+            public void releaseReservation(ReservationRequest request) {
+                // Nothing to throw towards: the caller is already compensating a failure and
+                // must not be derailed. Log loudly instead - this is stock left held, which a
+                // human (or a future reconciliation job) has to put back.
+                log.error("commercial-service unavailable releasing a reservation; stock may stay "
+                        + "held for lines {}: {}",
+                        request == null ? null : request.items(), cause.toString());
             }
         };
     }
 
-    private ServiceUnavailableException unavailable() {
+    /**
+     * The fallback runs for ANY throwable, including the business refusals that
+     * {@link CommercialErrorDecoder} produced from a 409 or 400. Those must pass through
+     * unchanged - replacing "that is out of stock" with "the store is down" both misinforms
+     * the customer and hides a legitimate 409 behind a 503. Only genuine transport failures
+     * become unavailability.
+     */
+    private RuntimeException translate(Throwable cause) {
+        if (cause instanceof ConflictException || cause instanceof BadRequestException) {
+            return (RuntimeException) cause;
+        }
         return new ServiceUnavailableException("Catalog service is temporarily unavailable, please retry");
     }
 }

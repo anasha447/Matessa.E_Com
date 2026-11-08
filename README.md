@@ -61,9 +61,13 @@ across a service mesh, event-driven stock handling, and edge rate limiting.
 - **Tokens never reach browser JavaScript.** Each Next app is its own BFF: the
   browser calls same-origin `/api/bff/*`, the Next server attaches the token from an
   httpOnly cookie and proxies to the gateway. An XSS bug cannot read a token.
-- **Stock is event-driven.** Checkout emits `OrderPlaced` through a transactional
-  outbox; commercial-service consumes it and adjusts stock under optimistic locking,
-  emitting `OrderRejected` if it can't.
+- **Stock is reserved, then settled.** Checkout holds the stock and claims the coupon use
+  synchronously, in one transaction on commercial-service, *before* charging the card — so
+  running out of stock is a 409 rather than a refund. `OrderPlaced` then goes out through a
+  transactional outbox and commercial-service settles it: cache eviction, and de-duplication
+  for at-least-once delivery. Cancellation runs the other way and puts the reservation back.
+  The synchronous half exists because money cannot wait for an event; the asynchronous half
+  carries what genuinely can.
 
 ## Stack
 

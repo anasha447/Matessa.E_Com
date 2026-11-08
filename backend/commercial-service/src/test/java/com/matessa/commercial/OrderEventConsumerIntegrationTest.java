@@ -1,14 +1,17 @@
 package com.matessa.commercial;
 
+import com.matessa.commercial.dto.request.StockReservationRequest;
 import com.matessa.commercial.entity.Category;
 import com.matessa.commercial.entity.Coupon;
 import com.matessa.commercial.entity.DiscountType;
 import com.matessa.commercial.entity.Product;
 import com.matessa.commercial.entity.ProductVariant;
+import com.matessa.commercial.exception.ConflictException;
 import com.matessa.commercial.repository.CategoryRepository;
 import com.matessa.commercial.repository.CouponRepository;
 import com.matessa.commercial.repository.ProductRepository;
 import com.matessa.commercial.repository.ProductVariantRepository;
+import com.matessa.commercial.service.ReservationService;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -38,6 +41,7 @@ import java.util.Properties;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Testcontainers
@@ -75,23 +79,12 @@ class OrderEventConsumerIntegrationTest {
     @Autowired ProductVariantRepository variantRepository;
     @Autowired CouponRepository couponRepository;
     @Autowired KafkaTemplate<String, String> kafkaTemplate;
+    @Autowired ReservationService reservationService;
 
     @Test
-    void orderPlaced_decrementsStock_idempotently_redeemsCoupon_andRejectsShortfall() throws Exception {
+    void orderPlaced_confirmsWithoutDecrementingAgain_andCancelReleases() throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        Category category = new Category();
-        category.setName("Helmets");
-        category.setSlug("helmets-" + suffix);
-        category.setActive(true);
-        Long categoryId = categoryRepository.save(category).getId();
-
-        Product product = new Product();
-        product.setCategoryId(categoryId);
-        product.setName("Trail Helmet");
-        product.setSlug("trail-helmet-" + suffix);
-        product.setBasePrice(new BigDecimal("100.00"));
-        product.setActive(true);
-        Long productId = productRepository.save(product).getId();
+        Long productId = saveProduct(suffix);
 
         ProductVariant variant = new ProductVariant();
         variant.setProductId(productId);
@@ -110,27 +103,131 @@ class OrderEventConsumerIntegrationTest {
         coupon.setActive(true);
         couponRepository.save(coupon);
 
-        // OrderPlaced -> decrement 3, redeem coupon
-        kafkaTemplate.send("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode()));
-        assertThat(awaitStock(variantId, 7, Duration.ofSeconds(30))).isEqualTo(7);
+        // Simulate the checkout that preceded this event: stock and the coupon use are taken
+        // synchronously now, by ReservationService, before the payment is charged. By the time
+        // OrderPlaced is consumed there is nothing left to decide.
+        variantRepository.reserveStock(variantId, 3);
+        couponRepository.claimUse(coupon.getCode());
+        assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(7);
         assertThat(couponRepository.findById(coupon.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
 
-        // duplicate eventId -> ignored (idempotent), stock stays 7
+        // OrderPlaced is now a confirmation: it must NOT decrement again. This is the
+        // regression that matters - while this handler also decremented, the stock for one
+        // order could be taken twice.
+        kafkaTemplate.send("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode()));
+        Thread.sleep(2500);
+        assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(7);
+        assertThat(couponRepository.findById(coupon.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
+
+        // duplicate eventId -> ignored (idempotent)
         kafkaTemplate.send("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode()));
         Thread.sleep(2500);
         assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(7);
 
-        // OrderCancelled -> restore stock + release coupon
+        // OrderCancelled still does real work: it puts the reservation back.
         kafkaTemplate.send("OrderCancelled", orderCancelled("evt-2", "AD-1", variantId, 3, coupon.getCode()));
         assertThat(awaitStock(variantId, 10, Duration.ofSeconds(30))).isEqualTo(10);
         assertThat(couponRepository.findById(coupon.getId()).orElseThrow().getUsedCount()).isEqualTo(0);
+    }
 
-        // OrderPlaced for more than is in stock -> rejected (stock untouched, OrderRejected emitted)
-        kafkaTemplate.send("OrderPlaced", orderPlaced("evt-3", "AD-2", variantId, 100, null));
-        String rejected = awaitRejected("AD-2", Duration.ofSeconds(30));
-        assertThat(rejected).isNotNull();
-        assertThat(rejected).contains("AD-2").contains("Insufficient stock");
-        assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(10);
+    @Test
+    void reserve_isAtomic_andRefusesWhatIsNotThere() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Long productId = saveProduct(suffix);
+        ProductVariant variant = new ProductVariant();
+        variant.setProductId(productId);
+        variant.setSku("RES-" + suffix);
+        variant.setStockQuantity(1);
+        variant.setActive(true);
+        Long variantId = variantRepository.save(variant).getId();
+
+        // Two lines of the same variant used to be checked independently against the full
+        // stock figure, so 2 x qty-1 both passed against a stock of 1 and the order was only
+        // rejected after the card had been charged. They are merged before checking now.
+        assertThatThrownBy(() -> reservationService.reserve(new StockReservationRequest(
+                List.of(new StockReservationRequest.Line(variantId, 1),
+                        new StockReservationRequest.Line(variantId, 1)),
+                null, null)))
+                .isInstanceOf(ConflictException.class);
+        assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity())
+                .as("a refused reservation must leave the shelf untouched")
+                .isEqualTo(1);
+
+        // The one unit can still be reserved, exactly once.
+        assertThat(reservationService.reserve(new StockReservationRequest(
+                List.of(new StockReservationRequest.Line(variantId, 1)), null, null)).lines())
+                .hasSize(1);
+        assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isZero();
+
+        assertThatThrownBy(() -> reservationService.reserve(new StockReservationRequest(
+                List.of(new StockReservationRequest.Line(variantId, 1)), null, null)))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void reserve_enforcesSingleUseCouponAndPerCustomerLimit() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Long productId = saveProduct(suffix);
+        ProductVariant variant = new ProductVariant();
+        variant.setProductId(productId);
+        variant.setSku("CPN-" + suffix);
+        variant.setStockQuantity(50);
+        variant.setActive(true);
+        Long variantId = variantRepository.save(variant).getId();
+
+        Coupon single = new Coupon();
+        single.setCode("ONCE-" + suffix);
+        single.setDiscountType(DiscountType.PERCENTAGE);
+        single.setDiscountValue(new BigDecimal("10"));
+        single.setMaxUses(1);
+        single.setPerUserLimit(1);
+        single.setUsedCount(0);
+        single.setValidFrom(Instant.now().minusSeconds(60));
+        single.setValidUntil(Instant.now().plusSeconds(86400));
+        single.setActive(true);
+        couponRepository.save(single);
+
+        StockReservationRequest.Line line = new StockReservationRequest.Line(variantId, 1);
+
+        // First use succeeds and consumes the single available use.
+        assertThat(reservationService.reserve(
+                new StockReservationRequest(List.of(line), single.getCode(), 0)).couponCode())
+                .isEqualTo(single.getCode());
+
+        // maxUses is now spent. This used to pass: the limit was checked while validating and
+        // then incremented unconditionally at redemption, in a later transaction, so two
+        // checkouts racing through validation both got the discount.
+        assertThatThrownBy(() -> reservationService.reserve(
+                new StockReservationRequest(List.of(line), single.getCode(), 0)))
+                .isInstanceOf(ConflictException.class);
+        assertThat(couponRepository.findByCode(single.getCode()).orElseThrow().getUsedCount())
+                .as("a refused claim must not inflate usedCount")
+                .isEqualTo(1);
+
+        // perUserLimit: stored and returned to clients, but previously never checked anywhere.
+        Coupon reusable = new Coupon();
+        reusable.setCode("TWICE-" + suffix);
+        reusable.setDiscountType(DiscountType.PERCENTAGE);
+        reusable.setDiscountValue(new BigDecimal("10"));
+        reusable.setPerUserLimit(2);
+        reusable.setUsedCount(0);
+        reusable.setValidFrom(Instant.now().minusSeconds(60));
+        reusable.setValidUntil(Instant.now().plusSeconds(86400));
+        reusable.setActive(true);
+        couponRepository.save(reusable);
+
+        assertThatThrownBy(() -> reservationService.reserve(
+                new StockReservationRequest(List.of(line), reusable.getCode(), 2)))
+                .as("a customer at their per-customer limit is refused")
+                .isInstanceOf(ConflictException.class);
+        assertThat(reservationService.reserve(
+                new StockReservationRequest(List.of(line), reusable.getCode(), 1)).couponCode())
+                .as("one use left is still allowed")
+                .isEqualTo(reusable.getCode());
+        // Guests carry no history, so the per-customer limit does not apply to them.
+        assertThat(reservationService.reserve(
+                new StockReservationRequest(List.of(line), reusable.getCode(), null)).couponCode())
+                .isEqualTo(reusable.getCode());
     }
 
     private String orderPlaced(String eventId, String orderNumber, Long variantId, int qty, String coupon) {
@@ -160,25 +257,21 @@ class OrderEventConsumerIntegrationTest {
         return stock;
     }
 
-    private String awaitRejected(String orderNumber, Duration timeout) {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "test-" + UUID.randomUUID());
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
-            consumer.subscribe(List.of("OrderRejected"));
-            long deadline = System.currentTimeMillis() + timeout.toMillis();
-            while (System.currentTimeMillis() < deadline) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
-                for (ConsumerRecord<String, String> record : records) {
-                    if (record.value() != null && record.value().contains(orderNumber)) {
-                        return record.value();
-                    }
-                }
-            }
-        }
-        return null;
+
+    /** An active product under an active category, priced at 100.00. */
+    private Long saveProduct(String suffix) {
+        Category category = new Category();
+        category.setName("Helmets");
+        category.setSlug("helmets-" + suffix);
+        category.setActive(true);
+        Long categoryId = categoryRepository.save(category).getId();
+
+        Product product = new Product();
+        product.setCategoryId(categoryId);
+        product.setName("Trail Helmet");
+        product.setSlug("trail-helmet-" + suffix);
+        product.setBasePrice(new BigDecimal("100.00"));
+        product.setActive(true);
+        return productRepository.save(product).getId();
     }
 }

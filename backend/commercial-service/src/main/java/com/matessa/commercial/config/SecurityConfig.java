@@ -49,6 +49,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/coupons/validate").permitAll()
                         // public storefront submissions: contact form + newsletter signup (guests)
                         .requestMatchers(HttpMethod.POST, "/api/contact", "/api/subscribers").permitAll()
+                        // Service-to-service checkout reservation. permitAll here because guest
+                        // checkout carries no JWT, so there is no caller identity to require.
+                        // Kept off the internet by the gateway (which denies /internal/** and has
+                        // no route for it) plus docker-compose.prod.yml not publishing this port.
+                        // See InternalReservationController for why that is the current answer.
+                        .requestMatchers("/internal/**").permitAll()
                         // everything else — catalog writes, contact/subscriber reads, coupon CRUD — staff only
                         .anyRequest().hasAnyRole("MANAGER", "ADMIN"))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))

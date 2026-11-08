@@ -1,9 +1,8 @@
 package com.matessa.order.service.impl;
 
 import com.matessa.order.client.CommercialClient;
-import com.matessa.order.client.CouponValidateRequest;
-import com.matessa.order.client.CouponValidation;
-import com.matessa.order.client.VariantPriceStock;
+import com.matessa.order.client.ReservationRequest;
+import com.matessa.order.client.ReservationResult;
 import com.matessa.order.dto.request.CartItemRequest;
 import com.matessa.order.dto.request.CheckoutRequest;
 import com.matessa.order.dto.request.GuestCheckoutRequest;
@@ -38,6 +37,8 @@ import com.matessa.order.repository.OrderStatusHistoryRepository;
 import com.matessa.order.repository.OutboxRepository;
 import com.matessa.order.repository.ProcessedEventRepository;
 import com.matessa.order.service.OrderService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.matessa.order.service.PaymentResult;
 import com.matessa.order.service.PaymentService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -61,6 +62,8 @@ import java.util.UUID;
 
 @Service
 public class OrderServiceImpl implements OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 
     // Customer-facing order id: "MA" + ddMMHHmmss in Indian wall-clock time,
     // e.g. MA1407143207 for 14 Jul 14:32:07 IST. Seconds keep same-minute orders
@@ -164,89 +167,115 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        // 1) validate stock + capture live price per line (sync, via Feign)
-        List<OrderItem> orderItems = new ArrayList<>();
-        List<OrderPlacedEvent.Line> eventLines = new ArrayList<>();
-        BigDecimal subtotal = BigDecimal.ZERO;
-        for (CartItemRequest line : lines) {
-            VariantPriceStock variant = commercialClient.getVariantPriceStock(line.productVariantId());
-            if (!variant.available()) {
-                throw new ConflictException("Variant no longer available: " + line.productVariantId());
-            }
-            if (variant.stockQuantity() < line.quantity()) {
-                throw new ConflictException("Insufficient stock for " + variant.sku()
-                        + " (available " + variant.stockQuantity() + ", requested " + line.quantity() + ")");
-            }
-            OrderItem orderItem = new OrderItem();
-            orderItem.setProductVariantId(line.productVariantId());
-            orderItem.setProductNameSnapshot(variant.productName());
-            orderItem.setSkuSnapshot(variant.sku());
-            orderItem.setUnitPriceSnapshot(variant.effectivePrice());
-            orderItem.setQuantity(line.quantity());
-            orderItems.add(orderItem);
-            eventLines.add(new OrderPlacedEvent.Line(line.productVariantId(), line.quantity()));
-            subtotal = subtotal.add(variant.effectivePrice().multiply(BigDecimal.valueOf(line.quantity())));
-        }
-        subtotal = subtotal.setScale(2, RoundingMode.HALF_UP);
+        // 1) How many times this customer has already used the coupon. perUserLimit was
+        //    persisted and handed to clients but never actually enforced - the repository
+        //    method for this count existed with no callers. The count has to come from here
+        //    because order-service owns the order history; the limit it is compared against
+        //    belongs to commercial-service. So the count travels with the reservation and the
+        //    comparison happens there, inside the same transaction that claims the use.
+        //    Guests have no history to count, so the limit does not apply to them.
+        String normalisedCoupon = couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
+        Integer priorCouponUses = (userId != null && normalisedCoupon != null)
+                ? (int) orderRepository.countByUserIdAndCouponCode(userId, normalisedCoupon)
+                : null;
 
-        // 2) coupon (validated by commercial; redeemed asynchronously on OrderPlaced)
-        BigDecimal discountAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        String appliedCoupon = null;
-        if (couponCode != null && !couponCode.isBlank()) {
-            CouponValidation validation = commercialClient.validateCoupon(
-                    new CouponValidateRequest(couponCode, subtotal));
-            if (!validation.valid()) {
-                throw new BadRequestException("Coupon not applicable: " + validation.message());
-            }
-            discountAmount = validation.discountAmount() == null
-                    ? discountAmount
-                    : validation.discountAmount().setScale(2, RoundingMode.HALF_UP);
-            appliedCoupon = couponCode;
-        }
-        BigDecimal total = subtotal.subtract(discountAmount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-
-        // 3) payment (mock)
-        PaymentResult payment = paymentService.charge(paymentMethod, total);
-        OrderStatus status = payment.status() == PaymentStatus.COMPLETED ? OrderStatus.PAID : OrderStatus.PENDING;
-
-        // 4) persist the order + items + outbox event in one transaction
-        Order order = new Order();
-        order.setUserId(userId);
-        order.setGuestEmail(guestEmail);
-        order.setIdempotencyKey(idemKey);
-        order.setOrderNumber(generateOrderNumber());
-        order.setStatus(status);
-        order.setSubtotal(subtotal);
-        order.setDiscountAmount(discountAmount);
-        order.setTotal(total);
-        order.setCouponCode(appliedCoupon);
-        order.setShippingAddressSnapshot(toJson(shippingAddress));
-        order.setShippingState(normalizeState(shippingAddress.state()));
-        order.setPaymentStatus(payment.status());
-        order.setPaymentMethod(paymentMethod);
-        order.setTransactionId(payment.transactionId());
-        order.setShippingStatus(ShippingStatus.PENDING);
-        order.setShippingMethod(shippingMethod);
-        Order saved;
+        // 2) Reserve stock and claim the coupon use BEFORE paying, in one transaction over on
+        //    commercial-service, which also prices the basket and returns what it reserved at.
+        //
+        //    The previous shape read stock here, charged the card, and left the actual
+        //    decrement to commercial-service consuming OrderPlaced up to two seconds later.
+        //    Nothing held the stock across that gap, so every concurrent buyer of the last
+        //    unit passed the read, every one was charged, and all but one order was cancelled
+        //    afterwards. Reserving first turns that into a 409 before any money moves.
+        //
+        //    It also replaces one Feign round trip per line with one for the whole basket.
+        ReservationRequest reservationRequest = new ReservationRequest(
+                lines.stream()
+                        .map(line -> new ReservationRequest.Line(line.productVariantId(), line.quantity()))
+                        .toList(),
+                normalisedCoupon,
+                priorCouponUses);
+        ReservationResult reservation = commercialClient.reserve(reservationRequest);
+        // From here on the goods are already held, so every exit has to hand the
+        // reservation back: a declined card, a lost idempotency-key race, or a database
+        // failure part-way through persisting. commercial-service holds the reservation in
+        // its own database, so this service rolling back does not undo it.
+        //
+        // Not covered: the process dying between the reservation and this catch. That
+        // leaves stock held with no order behind it, and the durable fix is a
+        // reconciliation job that expires reservations - noted, not built.
         try {
-            // saveAndFlush forces the unique idempotency_key constraint to fire now: if a
-            // concurrent request with the same key committed first, this order loses the race.
-            saved = orderRepository.saveAndFlush(order);
-        } catch (DataIntegrityViolationException ex) {
-            throw new ConflictException("Duplicate order request — idempotency key already used.");
+            List<OrderItem> orderItems = new ArrayList<>();
+            List<OrderPlacedEvent.Line> eventLines = new ArrayList<>();
+            for (ReservationResult.Line line : reservation.lines()) {
+                OrderItem orderItem = new OrderItem();
+                orderItem.setProductVariantId(line.productVariantId());
+                orderItem.setProductNameSnapshot(line.productName());
+                orderItem.setSkuSnapshot(line.sku());
+                orderItem.setUnitPriceSnapshot(line.unitPrice());
+                orderItem.setQuantity(line.quantity());
+                orderItems.add(orderItem);
+                eventLines.add(new OrderPlacedEvent.Line(line.productVariantId(), line.quantity()));
+            }
+            BigDecimal subtotal = reservation.subtotal().setScale(2, RoundingMode.HALF_UP);
+            BigDecimal discountAmount = reservation.discountAmount() == null
+                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                    : reservation.discountAmount().setScale(2, RoundingMode.HALF_UP);
+            String appliedCoupon = reservation.couponCode();
+            BigDecimal total = reservation.total().setScale(2, RoundingMode.HALF_UP);
+
+            // 3) payment (mock). A decline is now a real failure rather than a PENDING order:
+            //    the stock is already held, so leaving it held behind an order nobody paid for
+            //    would quietly make it unsellable.
+            PaymentResult payment = paymentService.charge(paymentMethod, total);
+            if (payment.status() == PaymentStatus.FAILED) {
+                throw new BadRequestException("Payment was declined — the order was not placed.");
+            }
+            OrderStatus status =
+                    payment.status() == PaymentStatus.COMPLETED ? OrderStatus.PAID : OrderStatus.PENDING;
+
+            // 4) persist the order + items + outbox event in one transaction
+            Order order = new Order();
+            order.setUserId(userId);
+            order.setGuestEmail(guestEmail);
+            order.setIdempotencyKey(idemKey);
+            order.setOrderNumber(generateOrderNumber());
+            order.setStatus(status);
+            order.setSubtotal(subtotal);
+            order.setDiscountAmount(discountAmount);
+            order.setTotal(total);
+            order.setCouponCode(appliedCoupon);
+            order.setShippingAddressSnapshot(toJson(shippingAddress));
+            order.setShippingState(normalizeState(shippingAddress.state()));
+            order.setPaymentStatus(payment.status());
+            order.setPaymentMethod(paymentMethod);
+            order.setTransactionId(payment.transactionId());
+            order.setShippingStatus(ShippingStatus.PENDING);
+            order.setShippingMethod(shippingMethod);
+            Order saved;
+            try {
+                // saveAndFlush forces the unique idempotency_key constraint to fire now: if a
+                // concurrent request with the same key committed first, this order loses the race.
+                saved = orderRepository.saveAndFlush(order);
+            } catch (DataIntegrityViolationException ex) {
+                throw new ConflictException("Duplicate order request — idempotency key already used.");
+            }
+
+            for (OrderItem orderItem : orderItems) {
+                orderItem.setOrderId(saved.getId());
+                orderItemRepository.save(orderItem);
+            }
+            recordHistory(saved, null, status, "Order placed", userId);
+
+            OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID().toString(), saved.getOrderNumber(),
+                    userId, appliedCoupon, eventLines, Instant.now());
+            enqueue(saved.getOrderNumber(), KafkaTopics.ORDER_PLACED, event);
+
+            return toResponse(saved, orderItems);
+        } catch (RuntimeException ex) {
+            releaseQuietly(reservationRequest);
+            throw ex;
         }
-
-        for (OrderItem orderItem : orderItems) {
-            orderItem.setOrderId(saved.getId());
-            orderItemRepository.save(orderItem);
-        }
-        recordHistory(saved, null, status, "Order placed", userId);
-
-        OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID().toString(), saved.getOrderNumber(),
-                userId, appliedCoupon, eventLines, Instant.now());
-        enqueue(saved.getOrderNumber(), KafkaTopics.ORDER_PLACED, event);
-
-        return toResponse(saved, orderItems);
     }
 
     @Override
@@ -497,5 +526,22 @@ public class OrderServiceImpl implements OrderService {
             return guestEmail.trim().equalsIgnoreCase(order.getGuestEmail().trim());
         }
         return false;
+    }
+
+
+    /**
+     * Hands a reservation back on a path that is already failing.
+     *
+     * <p>Never throws: the caller is in the middle of reporting another error to the customer
+     * and must not be derailed by the compensation. A failure here means stock stays held,
+     * which is logged loudly by the Feign fallback.
+     */
+    private void releaseQuietly(ReservationRequest reservationRequest) {
+        try {
+            commercialClient.releaseReservation(reservationRequest);
+        } catch (RuntimeException ex) {
+            log.error("Failed to release a reservation after a failed checkout; stock may stay held: {}",
+                    ex.toString());
+        }
     }
 }

@@ -1,6 +1,8 @@
 package com.matessa.order.config;
 
+import com.matessa.order.client.CommercialErrorDecoder;
 import feign.RequestInterceptor;
+import feign.codec.ErrorDecoder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -13,6 +15,16 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  */
 @Configuration
 public class FeignConfig {
+
+    /**
+     * Maps commercial-service's 409/400 responses back onto this service's own exceptions, so
+     * an out-of-stock answer reaches the customer as a 409 rather than being flattened into a
+     * 503 by the circuit-breaker fallback. See {@link CommercialErrorDecoder}.
+     */
+    @Bean
+    public ErrorDecoder commercialErrorDecoder() {
+        return new CommercialErrorDecoder();
+    }
 
     @Bean
     public RequestInterceptor authForwardingInterceptor() {

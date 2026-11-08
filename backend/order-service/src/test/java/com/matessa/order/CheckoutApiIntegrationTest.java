@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -118,6 +119,29 @@ class CheckoutApiIntegrationTest {
                         + ",\"available\":" + available + "}")));
     }
 
+    /**
+     * Stubs the checkout reservation. Checkout no longer reads stock and then decrements
+     * asynchronously - it asks commercial-service to hold the goods and claim the coupon use
+     * in one call, before paying, and gets back the prices it reserved at.
+     */
+    private void stubReservation(long variantId, int qty, String unitPrice,
+                                 String subtotal, String discount, String total, String couponCode) {
+        String coupon = couponCode == null ? "null" : "\"" + couponCode + "\"";
+        COMMERCIAL.stubFor(post(urlEqualTo("/internal/reservations")).willReturn(okJson(
+                "{\"lines\":[{\"productVariantId\":" + variantId + ",\"productId\":1,\"sku\":\"SKU-"
+                        + variantId + "\",\"productName\":\"Item " + variantId + "\",\"unitPrice\":" + unitPrice
+                        + ",\"quantity\":" + qty + "}],\"subtotal\":" + subtotal
+                        + ",\"couponCode\":" + coupon + ",\"discountAmount\":" + discount
+                        + ",\"total\":" + total + "}")));
+    }
+
+    /** Commercial refuses the reservation, e.g. the stock went while the basket sat there. */
+    private void stubReservationConflict(String message) {
+        COMMERCIAL.stubFor(post(urlEqualTo("/internal/reservations")).willReturn(
+                aResponse().withStatus(409).withHeader("Content-Type", "application/json")
+                        .withBody("{\"status\":409,\"error\":\"Conflict\",\"message\":\"" + message + "\"}")));
+    }
+
     private void addToCart(String token, long variantId, int qty) {
         ResponseEntity<String> res = client().post().uri("/api/cart/items")
                 .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
@@ -136,10 +160,8 @@ class CheckoutApiIntegrationTest {
         stubVariant(10, true, "100.00", 5);
         addToCart(alice, 10, 2);
 
-        // coupon FLAT20 -> 20 off
-        COMMERCIAL.stubFor(post(urlEqualTo("/api/coupons/validate")).willReturn(okJson(
-                "{\"valid\":true,\"code\":\"FLAT20\",\"discountType\":\"FIXED_AMOUNT\",\"discountValue\":20,"
-                        + "\"discountAmount\":20.00,\"message\":\"Valid\"}")));
+        // Commercial holds 2 x 100.00 and applies FLAT20, returning what it reserved at.
+        stubReservation(10, 2, "100.00", "200.00", "20.00", "180.00", "FLAT20");
 
         ResponseEntity<Map<String, Object>> order = client().post().uri("/api/orders")
                 .header("Authorization", "Bearer " + alice).contentType(MediaType.APPLICATION_JSON)
@@ -184,9 +206,12 @@ class CheckoutApiIntegrationTest {
                 .body(Map.of("shippingAddress", address(), "paymentMethod", "CARD")).retrieve().toEntity(String.class);
         assertThat(empty.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
-        // stock 1 but cart wants 3 -> 409
+        // stock 1 but cart wants 3 -> commercial refuses the reservation -> 409.
+        // The 409 has to survive the Feign circuit breaker rather than being flattened into a
+        // 503 by the fallback; CommercialErrorDecoder is what keeps it a 409.
         stubVariant(40, true, "50.00", 1);
         addToCart(bob, 40, 3);
+        stubReservationConflict("Insufficient stock for SKU-40 (available 1, requested 3)");
         ResponseEntity<String> oos = client().post().uri("/api/orders")
                 .header("Authorization", "Bearer " + bob).contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("shippingAddress", address(), "paymentMethod", "CARD")).retrieve().toEntity(String.class);

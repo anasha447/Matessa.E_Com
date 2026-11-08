@@ -43,6 +43,10 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Service-to-service only, and never routed from here. Denied explicitly
+                        // so that adding a gateway route for it later cannot quietly expose it:
+                        // /internal/reservations takes stock off the shelf and claims coupon uses.
+                        .requestMatchers("/internal/**").denyAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/products/**", "/api/variants/**",
                                 "/api/reviews/**", "/api/discounts/**").permitAll() // public catalog reads
