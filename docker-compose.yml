@@ -129,6 +129,9 @@ services:
       ORDER_SERVICE_URI: lb://order-service
       JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem   # gateway holds the PUBLIC key only
       REDIS_HOST: redis                         # Phase 4: edge rate limiting
+      # Browser origins allowed to call the gateway. Both storefronts, comma-separated.
+      # Override per environment; the code default covers local dev only.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3100,http://localhost:3000}
       TRACING_SAMPLING: "0"                     # tracing off (Tempo removed)
       # -XX:TieredStopAtLevel=1 → C1-only JIT for a much faster cold start (dev priority).
       JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -XX:TieredStopAtLevel=1 -Xmx320m"
@@ -309,6 +312,34 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  # ---- second-frontend (Next.js storefront #2) — the PUBLIC entry point for brand 2 ----
+  # Same shape as `frontend` above: prod-profile only, same-origin /api/bff, gateway
+  # reached server-side over the internal network. The two storefronts share one backend;
+  # which tenant a request belongs to is decided server-side at the gateway from the
+  # request host, never from a header the browser can set.
+  second-frontend:
+    build: ./second-frontend
+    container_name: matessa-second-frontend
+    profiles: ["prod"]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_GATEWAY_URL: http://api-gateway:8080   # internal service name; server-side calls + /media proxy
+    ports:
+      - "3000:3000"                               # put a TLS reverse proxy in front for prod
+    depends_on:
+      api-gateway:
+        condition: service_healthy                # was missing before: it could start before the gateway was up
+    networks:
+      - matessa-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
   # ---- pgAdmin (web DB admin) — LOCAL TOOL ONLY, never deployed ----
   # Guarded by the "tools" profile so it never starts in dev (`up -d`) or prod
   # (`--profile prod`). Start it on demand with:
@@ -316,7 +347,7 @@ services:
   # then open http://localhost:5050 and log in (email/password below). When registering
   # the database inside pgAdmin, use the INTERNAL network address — NOT localhost:5533 —
   # because pgAdmin runs in a container on the same Docker network:
-  #     Host=matessa-db  Port=5432  User=matessa_user  Password=Mat3ssa_users_dev_pw
+  #     Host=matessa-db  Port=5432  User=$USERS_DB_USER  Password=$USERS_DB_PASSWORD   (values from your .env)
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: matessa-pgadmin
