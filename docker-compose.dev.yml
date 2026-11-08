@@ -1,0 +1,71 @@
+# Dev override: run the JVM services from source instead of from built images.
+#
+# Why: `docker compose build` rebuilds a whole image per code change, which makes the
+# edit→see-it loop painfully slow. This override swaps each service's built image for a
+# maven container that bind-mounts the module and runs `mvn spring-boot:run`, with a
+# shared ~/.m2 volume so dependencies are downloaded once for all five services.
+#
+# Usage (override files are NOT applied automatically — name it explicitly):
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Everything else — env, ports, healthchecks, networks, dependency order — is inherited
+# from docker-compose.yml, so the two files can't drift. The plain
+#     docker compose --profile prod up -d --build
+# path still builds real images and is what deployment uses.
+#
+# Trade-off: slower cold start (Maven resolves + compiles on boot) in exchange for no
+# rebuild per change. First boot will take a few minutes while maven-repo fills.
+
+services:
+  eureka-server:
+    image: maven:3.9-eclipse-temurin-25
+    build: !reset null
+    working_dir: /app
+    command: mvn spring-boot:run
+    volumes:
+      - ./backend/eureka-server:/app
+      - maven-repo:/root/.m2
+
+  user-service:
+    image: maven:3.9-eclipse-temurin-25
+    build: !reset null
+    working_dir: /app
+    command: mvn spring-boot:run
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./backend/user-service:/app
+      - maven-repo:/root/.m2
+
+  api-gateway:
+    image: maven:3.9-eclipse-temurin-25
+    build: !reset null
+    working_dir: /app
+    command: mvn spring-boot:run
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./backend/api-gateway:/app
+      - maven-repo:/root/.m2
+
+  commercial-service:
+    image: maven:3.9-eclipse-temurin-25
+    build: !reset null
+    working_dir: /app
+    command: mvn spring-boot:run
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./backend/commercial-service:/app
+      - matessa-commercial-media:/app/media
+      - maven-repo:/root/.m2
+
+  order-service:
+    image: maven:3.9-eclipse-temurin-25
+    build: !reset null
+    working_dir: /app
+    command: mvn spring-boot:run
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./backend/order-service:/app
+      - maven-repo:/root/.m2
+
+volumes:
+  maven-repo:          # shared Maven cache: dependencies resolved once, not five times
