@@ -46,7 +46,7 @@ jwt:
   public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
   access-token-ttl-seconds: ${JWT_ACCESS_TTL:900}        # 15 min
   refresh-token-ttl-seconds: ${JWT_REFRESH_TTL:604800}   # 7 days
-  issuer: matessa-user-service
+  issuer: ${JWT_ISSUER:matessa-user-service}          # signed into every token; validated by every service
 
 # Initial admin seeding (first boot only; idempotent). Credentials come from the
 # environment — no default password is shipped. Leave ADMIN_PASSWORD unset to skip.

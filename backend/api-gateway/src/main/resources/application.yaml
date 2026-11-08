@@ -154,5 +154,14 @@ management:
         otlp:
           endpoint: ${OTLP_TRACING_ENDPOINT:http://tempo:4318/v1/traces}
 
+app:
+  ratelimit:
+    # Only these peers' X-Forwarded-For is trusted when identifying a client; see
+    # ClientIpResolver. Loopback + the private ranges Docker bridges use, so the storefront
+    # BFF containers are covered. Narrow to the real proxy addresses in production.
+    trusted-proxies: ${RATELIMIT_TRUSTED_PROXIES:127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+
 jwt:
   public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
+  # Must match user-service's jwt.issuer — tokens from any other issuer are rejected.
+  issuer: ${JWT_ISSUER:matessa-user-service}

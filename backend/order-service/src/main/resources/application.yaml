@@ -61,6 +61,8 @@ management:
 
 jwt:
   public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
+  # Must match user-service's jwt.issuer — tokens from any other issuer are rejected.
+  issuer: ${JWT_ISSUER:matessa-user-service}
 
 # Short timeout + circuit breaker so a slow/down commercial-service can't hang checkout.
 resilience4j:

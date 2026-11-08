@@ -7,6 +7,7 @@ import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.security.converter.RsaKeyConverters;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.io.FileNotFoundException;
@@ -24,11 +25,22 @@ import java.util.List;
 @Configuration
 public class JwtKeyConfig {
 
+    /**
+     * Builds the decoder. Beyond the RS256 signature (pinned by {@code withPublicKey}) and the
+     * exp/nbf timestamps, this also validates the {@code iss} claim.
+     *
+     * Without the issuer check the decoder accepts ANY token signed by this key pair, whatever
+     * minted it and whatever it was minted for — the claim was being signed and then never
+     * looked at. Binding it means a token has to come from our own issuer to be accepted.
+     */
     @Bean
-    public JwtDecoder jwtDecoder(@Value("${jwt.public-key-path}") String publicKeyLocation) throws IOException {
+    public JwtDecoder jwtDecoder(@Value("${jwt.public-key-path}") String publicKeyLocation,
+                                 @Value("${jwt.issuer}") String issuer) throws IOException {
         try (InputStream is = KeyFiles.open(publicKeyLocation)) {
             RSAPublicKey rsaPublicKey = RsaKeyConverters.x509().convert(is);
-            return NimbusJwtDecoder.withPublicKey(rsaPublicKey).build();
+            NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(rsaPublicKey).build();
+            decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+            return decoder;
         }
     }
 

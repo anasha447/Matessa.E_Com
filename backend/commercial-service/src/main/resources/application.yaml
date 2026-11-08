@@ -69,6 +69,8 @@ management:
 # Validates the RS256 access token with the PUBLIC key only (never signs).
 jwt:
   public-key-path: ${JWT_PUBLIC_KEY_PATH:file:../../keys/jwt-public.pem}
+  # Must match user-service's jwt.issuer — tokens from any other issuer are rejected.
+  issuer: ${JWT_ISSUER:matessa-user-service}
 
 # Uploaded product images: converted to WebP and stored here, served at /media/**.
 # In Docker this is a mounted volume so images survive rebuilds; locally it defaults

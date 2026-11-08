@@ -13,6 +13,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.security.converter.RsaKeyConverters;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
@@ -54,9 +55,19 @@ public class JwtKeyConfig {
         return new NimbusJwtEncoder(jwkSource);
     }
 
+    /**
+     * Builds the decoder. Beyond the RS256 signature (pinned by {@code withPublicKey}) and the
+     * exp/nbf timestamps, this also validates the {@code iss} claim.
+     *
+     * Without the issuer check the decoder accepts ANY token signed by this key pair, whatever
+     * minted it and whatever it was minted for — the claim was being signed and then never
+     * looked at. Binding it means a token has to come from our own issuer to be accepted.
+     */
     @Bean
-    public JwtDecoder jwtDecoder(RSAPublicKey publicKey) {
-        return NimbusJwtDecoder.withPublicKey(publicKey).build();
+    public JwtDecoder jwtDecoder(RSAPublicKey publicKey, @Value("${jwt.issuer}") String issuer) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(publicKey).build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+        return decoder;
     }
 
     /**

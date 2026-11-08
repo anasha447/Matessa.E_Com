@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.converter.RsaKeyConverters;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
@@ -57,10 +58,14 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(@Value("${jwt.public-key-path}") String publicKeyLocation) throws IOException {
+    public JwtDecoder jwtDecoder(@Value("${jwt.public-key-path}") String publicKeyLocation,
+                                 @Value("${jwt.issuer}") String issuer) throws IOException {
         try (InputStream is = openKey(publicKeyLocation)) {
             RSAPublicKey rsaPublicKey = RsaKeyConverters.x509().convert(is);
-            return NimbusJwtDecoder.withPublicKey(rsaPublicKey).build();
+            NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(rsaPublicKey).build();
+            // Validate iss in addition to signature + timestamps; see the services' JwtKeyConfig.
+            decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+            return decoder;
         }
     }
 
