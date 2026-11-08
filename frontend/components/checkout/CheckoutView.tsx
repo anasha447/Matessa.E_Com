@@ -5,12 +5,17 @@
 // Keeps the Indian-state dropdown and the ₹ order summary; confirmation shows the MA
 // order number with Track / Home CTAs.
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { OrderResponse, PaymentMethod } from "@/lib/api";
 import { useCart, clearGuestCart } from "@/components/cart/CartContext";
+import {
+  cartFingerprint,
+  checkoutIdempotencyKey,
+  clearCheckoutIdempotencyKey,
+} from "@/lib/checkout/idempotency";
 import { INDIAN_STATES_AND_UTS } from "@/lib/constants/indianStates";
 import { formatMoney } from "@/lib/utils/money";
 
@@ -33,7 +38,6 @@ export function CheckoutView({
   const [placed, setPlaced] = useState<OrderResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const idempotencyKey = useRef<string | null>(null);
 
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
@@ -108,7 +112,14 @@ export function CheckoutView({
       return;
     }
     setSubmitting(true);
-    const idemKey = (idempotencyKey.current ??= crypto.randomUUID());
+    // Bound to this basket and held in sessionStorage, so a reload-and-resubmit returns
+    // the original order instead of placing a second one. See lib/checkout/idempotency.
+    const idemKey = checkoutIdempotencyKey(
+      cartFingerprint(
+        items.map((i) => ({ productVariantId: i.productVariantId, quantity: i.quantity })),
+        applied?.code ?? null,
+      ),
+    );
     try {
       const shippingAddress = {
         recipientName: fullName,
@@ -137,6 +148,7 @@ export function CheckoutView({
             idemKey,
           );
       setPlaced(order);
+      clearCheckoutIdempotencyKey();   // this purchase is done; the next one starts clean
       if (guest) clearGuestCart();
       void refresh();
     } catch (e) {

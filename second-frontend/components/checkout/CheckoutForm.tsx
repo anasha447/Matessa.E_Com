@@ -1,10 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { OrderResponse, PaymentMethod } from "@/lib/api";
 import { useCart, clearGuestCart } from "@/components/cart/CartContext";
+import {
+  cartFingerprint,
+  checkoutIdempotencyKey,
+  clearCheckoutIdempotencyKey,
+} from "@/lib/checkout/idempotency";
 import type { CartViewData } from "@/lib/server/cart";
 
 const fmt = (n: number) => `$${n.toFixed(2)}`;
@@ -37,9 +42,6 @@ export function CheckoutForm({
   const [placed, setPlaced] = useState<OrderResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // One key per checkout attempt — generated lazily in the submit handler (not during render)
-  // and reused on retry so a double-submit dedupes server-side.
-  const idempotencyKey = useRef<string | null>(null);
 
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
@@ -69,8 +71,14 @@ export function CheckoutForm({
       return;
     }
     setSubmitting(true);
-    // Generate once per attempt in the handler (pure render); reused on retry.
-    const idemKey = (idempotencyKey.current ??= crypto.randomUUID());
+    // Bound to this basket and held in sessionStorage, so a reload-and-resubmit returns
+    // the original order instead of placing a second one. See lib/checkout/idempotency.
+    const idemKey = checkoutIdempotencyKey(
+      cartFingerprint(
+        cart.items.map((i) => ({ productVariantId: i.productVariantId, quantity: i.quantity })),
+        initialCoupon || null,
+      ),
+    );
     try {
       const shippingAddress = {
         recipientName: fullName,
@@ -98,6 +106,7 @@ export function CheckoutForm({
             shippingMethod,
           }, idemKey);
       setPlaced(order);
+      clearCheckoutIdempotencyKey();   // this purchase is done; the next one starts clean
       if (guest) clearGuestCart();
       void refresh(); // cart consumed → badge updates
     } catch (e) {
