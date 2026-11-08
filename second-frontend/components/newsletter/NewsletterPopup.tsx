@@ -18,7 +18,7 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [coupon, setCoupon] = useState<{ code: string; percent: number } | null>(null);
+  const [coupon, setCoupon] = useState<{ code: string | null; percent: number; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const hidden = HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -54,7 +54,7 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
     setSubmitting(true);
     try {
       const res = await api.subscribers.join({ email: email.trim() });
-      setCoupon({ code: res.couponCode, percent: res.discountPercent });
+      setCoupon({ code: res.couponCode, percent: res.discountPercent, message: res.message });
       suppress();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Something went wrong. Please try again.");
@@ -64,7 +64,7 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
   };
 
   const copyCode = async () => {
-    if (!coupon) return;
+    if (!coupon?.code) return;   // repeat signups carry no code to copy
     try {
       await navigator.clipboard.writeText(coupon.code);
       setCopied(true);
@@ -82,11 +82,17 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
       {coupon ? (
         <div className="nl-body">
           <h3 className="nl-title">You&apos;re in! 🎉</h3>
-          <p className="nl-sub">Here&apos;s your {coupon.percent}% off code — use it at checkout.</p>
-          <button className="nl-code" type="button" onClick={copyCode} title="Copy code">
-            <span>{coupon.code}</span>
-            <span className="nl-copy">{copied ? "Copied ✓" : "Copy"}</span>
-          </button>
+          {coupon.code ? (
+            <>
+              <p className="nl-sub">Here&apos;s your {coupon.percent}% off code — use it at checkout.</p>
+              <button className="nl-code" type="button" onClick={copyCode} title="Copy code">
+                <span>{coupon.code}</span>
+                <span className="nl-copy">{copied ? "Copied ✓" : "Copy"}</span>
+              </button>
+            </>
+          ) : (
+            <p className="nl-sub">{coupon.message}</p>
+          )}
         </div>
       ) : (
         <div className="nl-body">

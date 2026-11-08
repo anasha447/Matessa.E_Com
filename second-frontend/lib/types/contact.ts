@@ -22,10 +22,11 @@ export interface SubscribeRequest {
   email: string;
 }
 
-/** Returned to the storefront popup after signup — carries the welcome coupon to show. */
+/** Returned to the storefront popup after signup. `couponCode` is null for a repeat
+ *  signup — the backend never echoes an existing subscriber's stored code. */
 export interface SubscribeResponse {
   email: string;
-  couponCode: string;
+  couponCode: string | null;
   discountPercent: number;
   message: string;
 }

@@ -34,12 +34,22 @@ public class SubscriberServiceImpl implements SubscriberService {
     @Transactional
     public SubscribeResponse join(SubscribeRequest request) {
         String email = request.email().trim().toLowerCase();
-        // Idempotent: an already-subscribed email gets its existing coupon back (no dup coupon).
+        // Idempotent: an already-subscribed email does not mint a second coupon.
+        //
+        // It also must NOT get the stored coupon code back. This endpoint is public and
+        // unauthenticated, and the caller does not have to own the address they submit —
+        // echoing the stored code turned it into a coupon-theft oracle: submit any address
+        // you know and receive that person's welcome code.
+        //
+        // Without an email channel the code can only be shown inline on first signup, so a
+        // repeat signup returns no code at all. Residual: the differing message still reveals
+        // whether an address is subscribed. Closing that needs verified email delivery, where
+        // the code goes to the inbox and this response becomes identical either way.
         Subscriber existing = subscriberRepository.findByEmail(email).orElse(null);
         if (existing != null) {
-            return new SubscribeResponse(existing.getEmail(), existing.getCouponCode(),
+            return new SubscribeResponse(existing.getEmail(), null,
                     CouponService.WELCOME_DISCOUNT_PERCENT,
-                    "You're already on the list — here's your code again.");
+                    "You're already on the list — your welcome code was issued when you first signed up.");
         }
         // Mint the welcome coupon in the same transaction as the subscriber row, so a rollback
         // never leaves an orphan coupon.

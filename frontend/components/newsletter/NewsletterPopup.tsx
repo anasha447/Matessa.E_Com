@@ -11,7 +11,7 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ code: string; percent: number } | null>(null);
+  const [result, setResult] = useState<{ code: string | null; percent: number; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
     setError(null);
     try {
       const res = await api.subscribers.join({ email: email.trim() });
-      setResult({ code: res.couponCode, percent: res.discountPercent });
+      setResult({ code: res.couponCode, percent: res.discountPercent, message: res.message });
       localStorage.setItem(SEEN_KEY, "1");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't subscribe — please try again.");
@@ -67,7 +67,13 @@ export function NewsletterPopup({ guest }: { guest: boolean }) {
           <div className="relative">
             <h2 className="font-heading text-2xl font-bold text-yellow">You&apos;re in!</h2>
             <p className="mt-3 font-body text-craemy/90">
-              Use <span className="font-bold text-white">{result.code}</span> for {result.percent}% off your first order.
+              {result.code ? (
+                <>
+                  Use <span className="font-bold text-white">{result.code}</span> for {result.percent}% off your first order.
+                </>
+              ) : (
+                result.message
+              )}
             </p>
             <button
               type="button"
