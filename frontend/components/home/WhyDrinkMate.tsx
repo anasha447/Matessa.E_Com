@@ -1,15 +1,28 @@
 "use client";
 
-// "Why Drink Mate?" — faithful port of Matessa Landing v4 §Why Drink Mate.
-// Tall wrapper (100 + 6×55 svh) with a sticky full-viewport inner. Scroll progress
-// paints benefit i: titles reveal progressively (i ≤ idx shown; the active one is
-// green and nudged right), panels cross-fade (passed panels exit upward). Icon sits
-// on the RIGHT of the copy in a dark-green circle; stat line has a dash prefix.
-// Reduced motion → static stacked list.
+// "Why Drink Mate?" — Matessa Landing v4 §Why Drink Mate, refined.
+//
+// Same six reasons, copy, palette and sticky-scroll mechanics as the design: a tall wrapper
+// (100 + 6×55 svh) with a sticky full-viewport inner, scroll progress picking the active
+// reason. The refinement gives the walk a shape:
+//
+//  - A stem runs down beside the titles and grows continuously with scroll; a pair of leaves
+//    unfurls on the stem as each reason is reached. (Progress is written to the DOM directly,
+//    so scrolling never re-renders React — only a change of reason does.)
+//  - The copy is revealed by a short bottom-up wipe; the stat's rule draws in after it.
+//  - A faint leaf texture sits behind the panel only (BRAND §5: one pattern surface).
+//  - Titles are buttons that scroll to their reason (keyboard path; aria-current="step").
+//  - Phones swap the title list for the active title, a "03 / 06" counter and a dot stem.
+//  - Reduced motion → the static stacked list, no growth, no wipes.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 const PER_SVH = 55;
+const INK = "#2F3B28";
+const GREEN = "#3E5F2D";
+const BODY = "#4A5545";
+const PAGE = "#F9F7F3";
+const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 interface Benefit {
   title: string;
@@ -86,17 +99,87 @@ const BENEFITS: Benefit[] = [
   },
 ];
 
+const N = BENEFITS.length;
+
+/** Subscribes to a media query without setting state inside an effect. */
+function useMedia(query: string, serverValue: boolean) {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    [query],
+  );
+  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches, () => serverValue);
+}
+
+/** Two leaves on a node of the stem; they unfurl when the reason is reached. */
+function LeafNode({ reached, active }: { reached: boolean; active: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        left: 0,
+        top: "50%",
+        width: 0,
+        height: 0,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          left: -5,
+          top: -5,
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: reached ? GREEN : PAGE,
+          boxShadow: `0 0 0 1.5px ${reached ? GREEN : "rgba(47,59,40,0.22)"}`,
+          transition: `background 0.4s ${EASE}, box-shadow 0.4s ${EASE}`,
+        }}
+      />
+      <svg
+        width="34"
+        height="26"
+        viewBox="0 0 34 26"
+        style={{
+          position: "absolute",
+          left: -17,
+          top: -24,
+          overflow: "visible",
+          transformOrigin: "17px 24px",
+          transform: reached ? `scale(${active ? 1 : 0.86})` : "scale(0) rotate(-30deg)",
+          opacity: reached ? 1 : 0,
+          transition: `transform 0.7s ${EASE}, opacity 0.35s ease`,
+        }}
+      >
+        {/* left leaf */}
+        <path d="M17 24 C 12 20, 3 19, 1 9 C 9 9, 15 14, 17 24 Z" fill={GREEN} opacity="0.92" />
+        <path d="M17 24 C 13 19, 8 14, 3 11" stroke={PAGE} strokeWidth="0.9" fill="none" opacity="0.7" />
+        {/* right leaf */}
+        <path d="M17 24 C 21 19, 30 16, 33 5 C 25 6, 18 12, 17 24 Z" fill="#5E8A3E" />
+        <path d="M17 24 C 21 17, 26 11, 31 7" stroke={PAGE} strokeWidth="0.9" fill="none" opacity="0.7" />
+      </svg>
+    </span>
+  );
+}
+
 export function WhyDrinkMate() {
   const wrap = useRef<HTMLElement>(null);
+  const list = useRef<HTMLOListElement>(null);
+  const stemFill = useRef<HTMLSpanElement>(null);
+  const dotFill = useRef<HTMLSpanElement>(null);
+  const texture = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-  const [reduced, setReduced] = useState(false);
+  const reduced = useMedia("(prefers-reduced-motion: reduce)", false);
+  const phone = useMedia("(max-width: 719px)", false);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setReduced(true);
-      return;
-    }
+    if (reduced) return;
     let ticking = false;
+
     const update = () => {
       ticking = false;
       const el = wrap.current;
@@ -104,8 +187,29 @@ export function WhyDrinkMate() {
       const r = el.getBoundingClientRect();
       const total = r.height - window.innerHeight;
       const p = total > 0 ? Math.min(1, Math.max(0, -r.top / total)) : 1;
-      setActive(Math.min(BENEFITS.length - 1, Math.max(0, Math.floor(p * BENEFITS.length))));
+      const idx = Math.min(N - 1, Math.max(0, Math.floor(p * N)));
+      setActive(idx); // React bails out when the reason hasn't changed
+
+      // Continuous position along the reasons: 0 at the first title's centre, N-1 at the last.
+      const along = Math.min(N - 1, Math.max(0, p * N - 0.5));
+
+      const ol = list.current;
+      const fill = stemFill.current;
+      if (ol && fill) {
+        const items = Array.from(ol.children) as HTMLElement[];
+        if (items.length === N) {
+          const centre = (i: number) => items[i].offsetTop + items[i].offsetHeight / 2;
+          const i0 = Math.floor(along);
+          const i1 = Math.min(N - 1, i0 + 1);
+          const y = centre(i0) + (centre(i1) - centre(i0)) * (along - i0);
+          const track = centre(N - 1);
+          fill.style.transform = `scaleY(${track > 0 ? y / track : 0})`;
+        }
+      }
+      if (dotFill.current) dotFill.current.style.transform = `scaleX(${along / (N - 1)})`;
+      if (texture.current) texture.current.style.transform = `translate3d(0, ${(-p * 36).toFixed(1)}px, 0)`;
     };
+
     const onScroll = () => {
       if (!ticking) {
         ticking = true;
@@ -119,61 +223,54 @@ export function WhyDrinkMate() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, []);
+  }, [reduced, phone]);
 
-  const titleStyle = (i: number): React.CSSProperties => {
-    const shown = reduced || i <= active;
-    return {
-      margin: 0,
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      fontWeight: 700,
-      fontSize: "clamp(21px, 2.4vw, 33px)",
-      lineHeight: 1.2,
-      color: i === active || reduced ? "#3E5F2D" : "rgba(47,59,40,0.28)",
-      opacity: shown ? 1 : 0,
-      transform: !shown ? "translateY(26px)" : i === active && !reduced ? "translateX(10px)" : "none",
-      transition: "color 0.4s ease, opacity 0.6s ease, transform 0.7s cubic-bezier(0.22, 0.68, 0.2, 1)",
-    };
+  /** Scrolls so reason i is the active one (middle of its slice of the scroll range). */
+  const goTo = (i: number) => {
+    const el = wrap.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    const total = el.offsetHeight - window.innerHeight;
+    window.scrollTo({ top: top + ((i + 0.5) / N) * total, behavior: "smooth" });
   };
 
-  const panelStyle = (i: number): React.CSSProperties => {
-    const on = i === active;
-    return {
-      position: "absolute",
-      inset: 0,
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      gap: "clamp(14px, 2.4vh, 22px)",
-      opacity: on ? 1 : 0,
-      transform: on ? "none" : i < active ? "translateY(-26px)" : "translateY(26px)",
-      pointerEvents: on ? "auto" : "none",
-      transition: "opacity 0.45s ease, transform 0.65s cubic-bezier(0.22, 0.68, 0.2, 1)",
-    };
-  };
+  const heading = (
+    <h2
+      id="benefits-heading"
+      className="font-heading"
+      style={{ margin: 0, fontWeight: 700, fontSize: "clamp(30px, 3.4vw, 40px)", color: INK, textAlign: "center", textWrap: "balance" }}
+    >
+      Why Drink Mate?
+    </h2>
+  );
 
   if (reduced) {
     return (
-      <section id="benefits" style={{ background: "#F9F7F3", padding: "clamp(48px, 7vw, 90px) clamp(20px, 4vw, 32px)" }}>
-        <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 32 }}>
-          <h2 className="font-heading" style={{ margin: 0, fontWeight: 700, fontSize: "clamp(30px, 3.4vw, 40px)", color: "#2F3B28", textAlign: "center" }}>
-            Why Drink Mate?
-          </h2>
-          {BENEFITS.map((b) => (
-            <div key={b.title} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <h3 className="font-heading" style={titleStyle(-1)}>{b.title}</h3>
-              <Panel benefit={b} />
-            </div>
-          ))}
+      <section id="benefits" aria-labelledby="benefits-heading" style={{ background: PAGE, padding: "clamp(48px, 7vw, 90px) clamp(20px, 4vw, 32px)" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 36 }}>
+          {heading}
+          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 34 }}>
+            {BENEFITS.map((b) => (
+              <li key={b.title} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <h3 className="font-heading" style={{ margin: 0, fontWeight: 700, fontSize: "clamp(21px, 2.4vw, 30px)", lineHeight: 1.2, color: GREEN }}>
+                  {b.title}
+                </h3>
+                <Panel benefit={b} shown />
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
     );
   }
 
   return (
-    <section id="benefits" ref={wrap} style={{ position: "relative", background: "#F9F7F3", height: `${100 + BENEFITS.length * PER_SVH}svh` }}>
+    <section
+      id="benefits"
+      ref={wrap}
+      aria-labelledby="benefits-heading"
+      style={{ position: "relative", background: PAGE, height: `${100 + N * PER_SVH}svh` }}
+    >
       <div
         style={{
           position: "sticky",
@@ -182,30 +279,183 @@ export function WhyDrinkMate() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
-          gap: "clamp(26px, 4.5vh, 54px)",
+          gap: phone ? 26 : "clamp(30px, 5vh, 58px)",
           maxWidth: 1120,
           margin: "0 auto",
           padding: "clamp(20px, 3vh, 48px) clamp(20px, 4vw, 32px)",
           overflow: "hidden",
         }}
       >
-        <h2 className="font-heading" style={{ margin: 0, fontWeight: 700, fontSize: "clamp(30px, 3.4vw, 40px)", color: "#2F3B28", textAlign: "center" }}>
-          Why Drink Mate?
-        </h2>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(26px, 5vw, 80px)" }}>
-          {/* Titles */}
-          <div style={{ flex: "1 1 340px", minWidth: 270, display: "flex", flexDirection: "column", gap: "clamp(10px, 2vh, 22px)" }}>
+        {heading}
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: phone ? "column" : "row",
+            alignItems: phone ? "stretch" : "center",
+            gap: phone ? 22 : "clamp(36px, 6vw, 96px)",
+          }}
+        >
+          {/* ── Reasons: the stem on wide screens, counter + dot stem on phones ── */}
+          {phone ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                <h3
+                  key={active}
+                  className="font-heading"
+                  aria-live="polite"
+                  style={{
+                    margin: 0,
+                    fontWeight: 700,
+                    fontSize: 26,
+                    lineHeight: 1.15,
+                    color: GREEN,
+                    animation: `mtsa-wdm-wipe 0.6s ${EASE} both`,
+                  }}
+                >
+                  {BENEFITS[active].title}
+                </h3>
+                <span
+                  className="font-body"
+                  style={{ flex: "none", fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(47,59,40,0.62)", fontVariantNumeric: "tabular-nums" }}
+                >
+                  {String(active + 1).padStart(2, "0")} / {String(N).padStart(2, "0")}
+                </span>
+              </div>
+              <div aria-hidden="true" style={{ position: "relative", height: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ position: "absolute", left: 4, right: 4, top: 4, height: 2, borderRadius: 2, background: "rgba(47,59,40,0.14)" }} />
+                <span
+                  ref={dotFill}
+                  style={{ position: "absolute", left: 4, right: 4, top: 4, height: 2, borderRadius: 2, background: GREEN, transformOrigin: "left center", transform: "scaleX(0)" }}
+                />
+                {BENEFITS.map((b, i) => (
+                  <span
+                    key={b.title}
+                    style={{
+                      position: "relative",
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: i <= active ? GREEN : PAGE,
+                      boxShadow: `0 0 0 1.5px ${i <= active ? GREEN : "rgba(47,59,40,0.22)"}`,
+                      transition: `background 0.35s ${EASE}`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ flex: "1 1 0", minWidth: 0, position: "relative", paddingLeft: 40 }}>
+              {/* stem: faint track + growing fill, both centred on the leaf nodes */}
+              <span aria-hidden="true" style={{ position: "absolute", left: 13, top: 0, bottom: 0, width: 2, borderRadius: 2, background: "rgba(47,59,40,0.10)" }} />
+              <span
+                ref={stemFill}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 13,
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  borderRadius: 2,
+                  background: `linear-gradient(${GREEN}, #5E8A3E)`,
+                  transformOrigin: "top center",
+                  transform: "scaleY(0)",
+                }}
+              />
+              <ol ref={list} style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "clamp(8px, 1.8vh, 20px)" }}>
+                {BENEFITS.map((b, i) => {
+                  const reached = i <= active;
+                  const on = i === active;
+                  return (
+                    <li key={b.title} style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: -26, top: 0, bottom: 0 }}>
+                        <LeafNode reached={reached} active={on} />
+                      </span>
+                      <h3 className="font-heading" style={{ margin: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => goTo(i)}
+                          aria-current={on ? "step" : undefined}
+                          className="mtsa-wdm-title"
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: "4px 0",
+                            border: "none",
+                            background: "none",
+                            textAlign: "left",
+                            cursor: "pointer",
+                            font: "inherit",
+                            fontWeight: 700,
+                            fontSize: "clamp(21px, 2.4vw, 33px)",
+                            lineHeight: 1.2,
+                            color: on ? GREEN : "rgba(47,59,40,0.34)",
+                            opacity: reached ? 1 : 0.0,
+                            transform: reached ? (on ? "translateX(8px)" : "none") : "translateY(18px)",
+                            transition: `color 0.4s ease, opacity 0.6s ease, transform 0.7s ${EASE}`,
+                          }}
+                        >
+                          {b.title}
+                        </button>
+                      </h3>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+
+          {/* ── Panel: copy wipes in over a faint leaf texture ── */}
+          <div
+            style={{
+              flex: phone ? "none" : "1 1 0",
+              minWidth: 0,
+              position: "relative",
+              minHeight: phone ? 250 : "clamp(260px, 38vh, 340px)",
+            }}
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: phone ? "-12px -20px" : "-40px -48px",
+                overflow: "hidden",
+                pointerEvents: "none",
+                WebkitMaskImage: "radial-gradient(ellipse 70% 65% at 55% 50%, #000 0%, transparent 75%)",
+                maskImage: "radial-gradient(ellipse 70% 65% at 55% 50%, #000 0%, transparent 75%)",
+              }}
+            >
+              <div
+                ref={texture}
+                style={{
+                  position: "absolute",
+                  inset: "-40px 0",
+                  backgroundImage: "url(/brand/leaf-pattern-light.webp)",
+                  backgroundSize: "cover",
+                  backgroundPosition: "center 18%",
+                  opacity: 0.16,
+                  willChange: "transform",
+                }}
+              />
+            </div>
             {BENEFITS.map((b, i) => (
-              <h3 key={b.title} className="font-heading" style={titleStyle(i)}>
-                <span>{b.title}</span>
-              </h3>
-            ))}
-          </div>
-          {/* Panels */}
-          <div style={{ flex: "1 1 380px", minWidth: 270, position: "relative", minHeight: "clamp(250px, 38vh, 340px)" }}>
-            {BENEFITS.map((b, i) => (
-              <div key={b.title} style={panelStyle(i)}>
-                <Panel benefit={b} />
+              <div
+                key={b.title}
+                aria-hidden={i !== active}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  gap: "clamp(14px, 2.4vh, 22px)",
+                  pointerEvents: i === active ? "auto" : "none",
+                  visibility: i === active ? "visible" : "hidden",
+                  transition: i === active ? "visibility 0s" : "visibility 0s 0.3s",
+                }}
+              >
+                <Panel benefit={b} shown={i === active} />
               </div>
             ))}
           </div>
@@ -215,7 +465,17 @@ export function WhyDrinkMate() {
   );
 }
 
-function Panel({ benefit }: { benefit: Benefit }) {
+function Panel({ benefit, shown }: { benefit: Benefit; shown: boolean }) {
+  // Entrance: bottom-up wipe (clip-path) with a short rise; exit is a quicker fade.
+  const reveal = (delay: number): React.CSSProperties => ({
+    clipPath: shown ? "inset(-8% -4% -8% -4%)" : "inset(100% -4% -8% -4%)",
+    transform: shown ? "none" : "translateY(14px)",
+    opacity: shown ? 1 : 0,
+    transition: shown
+      ? `clip-path 0.7s ${EASE} ${delay}s, transform 0.7s ${EASE} ${delay}s, opacity 0.3s ease ${delay}s`
+      : "clip-path 0.3s ease, transform 0.3s ease, opacity 0.25s ease",
+  });
+
   return (
     <>
       <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: "clamp(16px, 2.4vw, 26px)" }}>
@@ -228,14 +488,19 @@ function Panel({ benefit }: { benefit: Benefit }) {
             alignItems: "center",
             justifyContent: "center",
             borderRadius: "50%",
-            background: "#2F3B28",
+            background: INK,
             color: "#EADBA2",
             boxShadow: "0 12px 26px rgba(47,59,40,0.22)",
+            transform: shown ? "scale(1) rotate(0deg)" : "scale(0.7) rotate(-25deg)",
+            opacity: shown ? 1 : 0,
+            transition: shown
+              ? `transform 0.75s ${EASE} 0.08s, opacity 0.35s ease 0.08s`
+              : "transform 0.25s ease, opacity 0.2s ease",
           }}
         >
           {benefit.icon}
         </div>
-        <p style={{ margin: 0, maxWidth: "46ch", fontSize: "clamp(15px, 1.4vw, 18px)", fontWeight: 500, lineHeight: 1.7, color: "#4A5545" }}>
+        <p style={{ margin: 0, maxWidth: "46ch", fontSize: "clamp(15px, 1.4vw, 18px)", fontWeight: 500, lineHeight: 1.7, color: BODY, ...reveal(0) }}>
           {benefit.copy}
         </p>
       </div>
@@ -248,10 +513,22 @@ function Panel({ benefit }: { benefit: Benefit }) {
           fontWeight: 700,
           letterSpacing: "0.14em",
           textTransform: "uppercase",
-          color: "#3E5F2D",
+          color: GREEN,
+          ...reveal(0.14),
         }}
       >
-        <span style={{ width: 26, height: 2, borderRadius: 2, background: "currentColor", flex: "none" }} />
+        <span
+          style={{
+            width: 26,
+            height: 2,
+            borderRadius: 2,
+            background: "currentColor",
+            flex: "none",
+            transformOrigin: "left center",
+            transform: shown ? "scaleX(1)" : "scaleX(0)",
+            transition: shown ? `transform 0.6s ${EASE} 0.3s` : "transform 0.2s ease",
+          }}
+        />
         <span>{benefit.stat}</span>
       </div>
     </>
