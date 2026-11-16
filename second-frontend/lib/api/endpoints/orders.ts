@@ -1,6 +1,6 @@
 // Orders & checkout (API.md §4.10). Auth + owner; staff order management.
 import { http } from '../http';
-import type { OrderStatus, Page, PageParams } from '@/lib/types/common';
+import type { OrderStatus, Page, PageParams, PaymentMethod } from '@/lib/types/common';
 import type {
   CheckoutRequest,
   GuestCheckoutRequest,
@@ -18,16 +18,24 @@ export type OrderAdminListParams = PageParams & {
 export const ordersApi = {
   /** Place an order. Throws ApiError 409 if a line went out of stock. An optional
    *  idempotencyKey makes a retried submit return the same order instead of a duplicate. */
-  checkout: (body: CheckoutRequest, idempotencyKey?: string) =>
-    http.post<OrderResponse>('/api/orders', body,
-      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined),
-
-  /** Guest checkout — no account. Public. Returns the order (incl. order number). */
-  guestCheckout: (body: GuestCheckoutRequest, idempotencyKey?: string) =>
-    http.post<OrderResponse>('/api/orders/guest', body, {
-      auth: false,
+  checkout: (body: CheckoutRequest, idempotencyKey?: string, signal?: AbortSignal) =>
+    http.post<OrderResponse>('/api/orders', body, {
+      signal,
       ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
     }),
+
+  /** Guest checkout — no account. Public. Returns the order (incl. order number). */
+  guestCheckout: (body: GuestCheckoutRequest, idempotencyKey?: string, signal?: AbortSignal) =>
+    http.post<OrderResponse>('/api/orders/guest', body, {
+      auth: false,
+      signal,
+      ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+    }),
+
+  /** Public: the payment methods this store accepts right now (COD-only until a real
+   *  payment provider is connected). The checkout shows only these. */
+  paymentMethods: () =>
+    http.get<{ methods: PaymentMethod[] }>('/api/orders/payment-methods', { auth: false }),
 
   /** Public guest-order tracking by order number + the email it was placed with. */
   track: (orderNumber: string, email: string) =>

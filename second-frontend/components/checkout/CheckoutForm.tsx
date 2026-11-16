@@ -1,15 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { OrderResponse, PaymentMethod } from "@/lib/api";
 import { useCart, clearGuestCart } from "@/components/cart/CartContext";
-import {
-  cartFingerprint,
-  checkoutIdempotencyKey,
-  clearCheckoutIdempotencyKey,
-} from "@/lib/checkout/idempotency";
+import { cartFingerprint, useCheckoutKey } from "@/lib/checkout/idempotency";
 import type { CartViewData } from "@/lib/server/cart";
 
 const fmt = (n: number) => `$${n.toFixed(2)}`;
@@ -20,10 +16,12 @@ interface CheckoutUser {
   fullName: string;
 }
 
-const PAYMENTS: { key: PaymentMethod; title: string; sub: string }[] = [
-  { key: "COD", title: "Cash on delivery", sub: "Pay when it arrives" },
-  { key: "ONLINE", title: "Online payment", sub: "Card, Razorpay or PayPal" },
-];
+const PAYMENT_COPY: Record<string, { title: string; sub: string }> = {
+  COD: { title: "Cash on delivery", sub: "Pay when it arrives" },
+  ONLINE: { title: "Online payment", sub: "Card, Razorpay or PayPal" },
+};
+const SUBMIT_TIMEOUT_MS = 20_000;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function CheckoutForm({
   cart,
@@ -39,9 +37,12 @@ export function CheckoutForm({
   guest?: boolean;
 }) {
   const { refresh } = useCart();
+  const checkoutKey = useCheckoutKey(); // one key per checkout visit, minted on page load
+  const inFlight = useRef(false);
   const [placed, setPlaced] = useState<OrderResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [methods, setMethods] = useState<PaymentMethod[] | null>(null);
 
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
@@ -59,26 +60,71 @@ export function CheckoutForm({
 
   const count = cart.items.reduce((s, i) => s + i.quantity, 0);
   const total = cart.subtotal;
+  const overStock = cart.items.filter((i) => !i.available || i.quantity > i.stockQuantity);
+
+  // Only the payment methods the server says are live (COD-only until a real provider).
+  useEffect(() => {
+    let cancelled = false;
+    api.orders
+      .paymentMethods()
+      .then((r) => {
+        if (cancelled) return;
+        const live = r.methods.filter((m) => m in PAYMENT_COPY);
+        setMethods(live.length > 0 ? live : ["COD"]);
+        if (live.length > 0 && !live.includes("COD")) setPayment(live[0]);
+      })
+      .catch(() => {
+        if (!cancelled) setMethods(["COD"]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Warn before leaving only while the order request is in flight.
+  useEffect(() => {
+    if (!submitting) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [submitting]);
 
   const placeOrder = async () => {
+    if (inFlight.current) return; // second click / Enter while the first is in flight
     setError(null);
-    if (!fullName || !line1 || !city || !region || !postalCode || !country || !phone) {
+    if (!fullName.trim() || !line1.trim() || !city.trim() || !region.trim() || !postalCode.trim() || !country.trim() || !phone.trim()) {
       setError("Please complete all required contact and shipping fields.");
       return;
     }
-    if (guest && !/^\S+@\S+\.\S+$/.test(email)) {
+    if (phone.replace(/\D/g, "").length < 7) {
+      setError("Please enter a phone number we can reach you on.");
+      return;
+    }
+    if (!/^[A-Za-z0-9 -]{3,10}$/.test(postalCode.trim())) {
+      setError("Please enter a valid ZIP / postal code.");
+      return;
+    }
+    if (guest && !EMAIL.test(email.trim())) {
       setError("Please enter a valid email so we can send your order confirmation.");
       return;
     }
+    if (overStock.length > 0) {
+      setError("Some items are no longer available in that quantity — please review your cart.");
+      return;
+    }
+    const chosen = methods?.includes(payment) ? payment : "COD";
+    inFlight.current = true;
     setSubmitting(true);
-    // Bound to this basket and held in sessionStorage, so a reload-and-resubmit returns
-    // the original order instead of placing a second one. See lib/checkout/idempotency.
-    const idemKey = checkoutIdempotencyKey(
+    // One key for this whole visit (minted on page load): a double click, a retry or a
+    // reload reuses it, so the server returns the original order instead of a second one.
+    const idemKey = checkoutKey.keyFor(
       cartFingerprint(
         cart.items.map((i) => ({ productVariantId: i.productVariantId, quantity: i.quantity })),
         initialCoupon || null,
       ),
     );
+    checkoutKey.lock();
+    const signal = AbortSignal.timeout(SUBMIT_TIMEOUT_MS);
     try {
       const shippingAddress = {
         recipientName: fullName,
@@ -95,22 +141,26 @@ export function CheckoutForm({
             guestEmail: email,
             items: cart.items.map((i) => ({ productVariantId: i.productVariantId, quantity: i.quantity })),
             shippingAddress,
-            paymentMethod: payment,
+            paymentMethod: chosen,
             couponCode: initialCoupon || null,
             shippingMethod,
-          }, idemKey)
+          }, idemKey, signal)
         : await api.orders.checkout({
             shippingAddress,
-            paymentMethod: payment,
+            paymentMethod: chosen,
             couponCode: initialCoupon || null,
             shippingMethod,
-          }, idemKey);
+          }, idemKey, signal);
       setPlaced(order);
-      clearCheckoutIdempotencyKey();   // this purchase is done; the next one starts clean
+      checkoutKey.clear();   // this purchase is done; the next one starts clean
       if (guest) clearGuestCart();
       void refresh(); // cart consumed → badge updates
     } catch (e) {
-      if (e instanceof ApiError) {
+      const code = e instanceof ApiError ? e.body?.code : undefined;
+      if (code === "REQUEST_IN_PROGRESS" || code === "IDEMPOTENCY_KEY_REUSED") {
+        setError("We may already have your order — please check your orders before trying again.");
+      } else if (e instanceof ApiError) {
+        checkoutKey.unlock(); // a definite "no order" answer
         if (e.isConflict) {
           setError("Sorry — an item just went out of stock. Please review your cart and try again.");
         } else if (e.isUnavailable) {
@@ -121,9 +171,12 @@ export function CheckoutForm({
           setError(e.message || "Couldn't place your order. Please try again.");
         }
       } else {
-        setError("Network error — please try again.");
+        // Timeout or dropped connection: the order may exist. The key stays locked, so a
+        // retry is safe — it returns the same order if it was placed.
+        setError("We couldn't confirm your order in time. Check your orders, or try again — it won't be placed twice.");
       }
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -236,15 +289,19 @@ export function CheckoutForm({
             <h2>
               Payment <span className="step">03 / 03</span>
             </h2>
-            {PAYMENTS.map((p) => (
-              <button key={p.key} type="button" className={`opt-card${payment === p.key ? " is-selected" : ""}`} onClick={() => setPayment(p.key)}>
-                <span className="radio" />
-                <span className="opt-body">
-                  <span className="opt-title">{p.title}</span>
-                  <span className="opt-sub">{p.sub}</span>
-                </span>
-              </button>
-            ))}
+            {methods === null ? (
+              <p className="opt-sub">Loading payment options…</p>
+            ) : (
+              methods.map((m) => (
+                <button key={m} type="button" role="radio" aria-checked={payment === m} className={`opt-card${payment === m ? " is-selected" : ""}`} onClick={() => setPayment(m)}>
+                  <span className="radio" />
+                  <span className="opt-body">
+                    <span className="opt-title">{PAYMENT_COPY[m].title}</span>
+                    <span className="opt-sub">{PAYMENT_COPY[m].sub}</span>
+                  </span>
+                </button>
+              ))
+            )}
             {payment === "ONLINE" && (
               <p className="opt-sub" style={{ marginTop: 12 }}>
                 You&apos;ll be redirected to complete payment securely. Payment is simulated in this build.
@@ -297,7 +354,7 @@ export function CheckoutForm({
               <small>Total</small>
               <span>{fmt(total)}</span>
             </div>
-            <button className="btn btn-primary" type="button" onClick={placeOrder} disabled={submitting}>
+            <button className="btn btn-primary" type="button" onClick={placeOrder} disabled={submitting || methods === null || overStock.length > 0} aria-busy={submitting}>
               {submitting ? "Placing…" : "Place order"}
             </button>
           </div>

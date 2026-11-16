@@ -60,4 +60,6 @@ export interface ApiErrorBody {
   message: string;
   path: string;
   fieldErrors?: Record<string, string>;
+  /** Machine-readable reason, when the server gives one (e.g. IDEMPOTENCY_KEY_REUSED). */
+  code?: string;
 }

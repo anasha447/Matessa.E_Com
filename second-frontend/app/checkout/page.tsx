@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { TopBar } from "@/components/layout/TopBar";
@@ -10,6 +11,7 @@ import { getCurrentUser } from "@/lib/server/session";
 import { getCartView } from "@/lib/server/cart";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function CheckoutPage({
   searchParams,
@@ -17,7 +19,7 @@ export default async function CheckoutPage({
   searchParams: Promise<{ coupon?: string }>;
 }) {
   const { coupon } = await searchParams;
-  const initialCoupon = coupon && coupon.trim() ? coupon.trim() : null;
+  const initialCoupon = coupon && coupon.trim() ? coupon.trim().slice(0, 40) : null;
 
   const jar = await cookies();
   const authed = jar.has(ACCESS_COOKIE) || jar.has(REFRESH_COOKIE);
