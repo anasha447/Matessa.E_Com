@@ -27,11 +27,13 @@ public class OrderEventConsumer {
 
     @KafkaListener(topics = KafkaTopics.ORDER_PLACED, groupId = "commercial-service")
     public void onOrderPlaced(String payload) {
+        com.matessa.commercial.tenant.KafkaTenancy.requireStore(KafkaTopics.ORDER_PLACED);
         orderEventService.handleOrderPlaced(parse(payload, OrderPlacedEvent.class));
     }
 
     @KafkaListener(topics = KafkaTopics.ORDER_CANCELLED, groupId = "commercial-service")
     public void onOrderCancelled(String payload) {
+        com.matessa.commercial.tenant.KafkaTenancy.requireStore(KafkaTopics.ORDER_CANCELLED);
         orderEventService.handleOrderCancelled(parse(payload, OrderCancelledEvent.class));
     }
 

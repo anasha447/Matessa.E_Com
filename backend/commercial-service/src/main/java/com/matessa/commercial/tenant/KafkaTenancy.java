@@ -23,6 +23,20 @@ public class KafkaTenancy {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaTenancy.class);
 
+    /** Thrown by listeners for a record with no (known) store. Non-retryable → DLT. */
+    public static class MissingStoreException extends IllegalArgumentException {
+        public MissingStoreException(String topic) {
+            super("Record on '" + topic + "' has no known store header");
+        }
+    }
+
+    /** First line of every listener: the record interceptor must have set a store. */
+    public static void requireStore(String topic) {
+        if (TenantContext.getTenantId() == null) {
+            throw new MissingStoreException(topic);
+        }
+    }
+
     /** A record for {@code topic} tagged with the store currently in context. */
     public static ProducerRecord<String, String> record(String topic, String key, String value) {
         String tenant = TenantContext.getTenantId();
@@ -43,10 +57,14 @@ public class KafkaTenancy {
                 Header header = record.headers().lastHeader(TenantContext.HEADER);
                 String tenant = header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
                 if (!tenants.isKnown(tenant)) {
-                    // Never guess a store: skipping beats writing into the wrong schema.
-                    log.error("Skipping {}@{} offset {}: missing or unknown store header '{}'",
+                    // Never guess a store. The record still reaches the listener, which calls
+                    // requireStore() and fails with a non-retryable error, so the record lands
+                    // on <topic>.DLT where it can be inspected and replayed — it used to be
+                    // dropped here with its offset committed, i.e. lost.
+                    log.error("{}@{} offset {}: missing or unknown store header '{}' — sending to DLT",
                             record.topic(), record.partition(), record.offset(), tenant);
-                    return null;
+                    TenantContext.clear();
+                    return record;
                 }
                 TenantContext.setTenantId(tenant);
                 return record;

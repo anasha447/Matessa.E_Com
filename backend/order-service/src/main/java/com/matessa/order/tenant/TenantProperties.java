@@ -23,6 +23,9 @@ public record TenantProperties(List<String> tenants) {
             if (!SAFE_ID.matcher(t).matches()) {
                 throw new IllegalStateException("Invalid store id '" + t + "' (allowed: " + SAFE_ID + ")");
             }
+            if (t.equals("public") || t.startsWith("pg_") || t.equals("information_schema")) {
+                throw new IllegalStateException("Store id '" + t + "' is a reserved Postgres schema name");
+            }
         }
         tenants = List.copyOf(tenants);
     }
@@ -31,7 +34,10 @@ public record TenantProperties(List<String> tenants) {
         return tenantId != null && tenants.contains(tenantId);
     }
 
-    /** Schema used when no store is in context (startup schema validation only). */
+    /**
+     * Schema for Hibernate's startup metadata connection only. Never a fallback for real work:
+     * data access without a store in context fails (see TenancyConfig).
+     */
     public String defaultTenant() {
         return tenants.getFirst();
     }

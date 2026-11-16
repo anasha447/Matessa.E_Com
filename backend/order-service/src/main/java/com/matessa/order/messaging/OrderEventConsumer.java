@@ -26,6 +26,7 @@ public class OrderEventConsumer {
 
     @KafkaListener(topics = KafkaTopics.ORDER_REJECTED, groupId = "order-service")
     public void onOrderRejected(String payload) {
+        com.matessa.order.tenant.KafkaTenancy.requireStore(KafkaTopics.ORDER_REJECTED);
         OrderRejectedEvent event;
         try {
             event = objectMapper.readValue(payload, OrderRejectedEvent.class);

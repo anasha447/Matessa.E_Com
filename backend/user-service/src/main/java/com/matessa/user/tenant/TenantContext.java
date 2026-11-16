@@ -18,6 +18,26 @@ public final class TenantContext {
 
     private static final ThreadLocal<String> CURRENT = new ThreadLocal<>();
 
+    /**
+     * False while the application starts (Spring Data validates repository queries and Hibernate
+     * reads metadata before any request exists); set once the app is ready. From then on, data
+     * access with no store in context is an error rather than a silent default.
+     */
+    private static volatile boolean strict = false;
+
+    static void enforceFromNowOn() {
+        strict = true;
+    }
+
+    /** A (new) application context is starting: allow the bootstrap default again. */
+    static void bootstrapping() {
+        strict = false;
+    }
+
+    static boolean isStrict() {
+        return strict;
+    }
+
     private TenantContext() {}
 
     public static String getTenantId() {

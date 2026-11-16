@@ -39,6 +39,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class CustomerAnalyticsApiIntegrationTest {
 
+    // Repositories are called directly from the test thread, which (unlike a request) has no
+    // store in context. Data access without one fails by design, so bind the test thread.
+    @org.junit.jupiter.api.BeforeEach
+    void bindStore() {
+        com.matessa.user.tenant.TenantContext.setTenantId("matessa");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void unbindStore() {
+        com.matessa.user.tenant.TenantContext.clear();
+    }
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("users");

@@ -22,6 +22,10 @@ import org.springframework.core.Ordered;
 @EnableConfigurationProperties(TenantProperties.class)
 public class TenancyConfig {
 
+    public TenancyConfig() {
+        TenantContext.bootstrapping(); // created early in every context, before repositories
+    }
+
     @Bean
     FilterRegistrationBean<TenantFilter> tenantFilter(TenantProperties tenants) {
         FilterRegistrationBean<TenantFilter> registration = new FilterRegistrationBean<>(new TenantFilter(tenants));
@@ -39,8 +43,18 @@ public class TenancyConfig {
         return new CurrentTenantIdentifierResolver<>() {
             @Override
             public String resolveCurrentTenantIdentifier() {
+                // No fallback store: code that reaches the database without a store in
+                // context (a new @Scheduled job without runAs, an @Async method, a listener
+                // without the record interceptor) must fail loudly, not quietly read and
+                // write the first store's data.
                 String tenant = TenantContext.getTenantId();
-                return tenant != null ? tenant : tenants.defaultTenant();
+                if (tenant != null) {
+                    return tenant;
+                }
+                if (TenantContext.isStrict()) {
+                    throw new IllegalStateException("Database access outside a store context");
+                }
+                return tenants.defaultTenant(); // startup only: repository/query bootstrap
             }
 
             @Override
@@ -57,6 +71,12 @@ public class TenancyConfig {
             properties.put(MultiTenancySettings.MULTI_TENANT_CONNECTION_PROVIDER, provider);
             properties.put(MultiTenancySettings.MULTI_TENANT_IDENTIFIER_RESOLVER, resolver);
         };
+    }
+
+    /** From the moment the app is ready, no store in context means a bug — fail loudly. */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void enforceStoreContext() {
+        TenantContext.enforceFromNowOn();
     }
 
     @Bean
