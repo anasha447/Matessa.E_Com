@@ -45,18 +45,38 @@ spring:
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/categories/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-products
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/products/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-variants
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/variants/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-images
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/images/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-media
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
@@ -65,26 +85,56 @@ spring:
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/reviews/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-wishlist
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/wishlist/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-coupons
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/coupons/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-discounts
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/discounts/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-contact
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/contact/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: commercial-subscribers
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/subscribers/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: analytics-sales
               uri: ${ORDER_SERVICE_URI:lb://order-service}
               predicates:
@@ -93,6 +143,11 @@ spring:
               uri: ${COMMERCIAL_SERVICE_URI:lb://commercial-service}
               predicates:
                 - Path=/api/analytics/catalog/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: commercialService
+                    fallbackUri: forward:/fallback/commercial-service
             - id: analytics-customers
               uri: ${USER_SERVICE_URI:lb://user-service}
               predicates:
@@ -128,6 +183,11 @@ resilience4j:
         failure-rate-threshold: 60
         wait-duration-in-open-state: 4s
         permitted-number-of-calls-in-half-open-state: 3
+      commercialService:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 3
   timelimiter:
     instances:
       userService:
@@ -136,6 +196,9 @@ resilience4j:
         # Tolerant of JDK-25 GC pauses on the shared dev VM so transient pauses don't
         # trip the breaker (was 5s → frequent 503s on /cart/price under load).
         timeout-duration: 12s
+      commercialService:
+        # Image uploads (multipart, re-encoded to WebP) are the slowest commercial call.
+        timeout-duration: 15s
 
 management:
   endpoints:
@@ -147,7 +210,7 @@ management:
       show-details: never
   tracing:
     sampling:
-      probability: ${TRACING_SAMPLING:1.0}
+      probability: ${TRACING_SAMPLING:0.1}
   opentelemetry:
     tracing:
       export:
@@ -155,6 +218,10 @@ management:
           endpoint: ${OTLP_TRACING_ENDPOINT:http://tempo:4318/v1/traces}
 
 app:
+  # The stores this deployment serves. Must match APP_TENANCY_TENANTS in every service:
+  # the gateway refuses any other X-Tenant-ID (StoreGuardFilter).
+  tenancy:
+    tenants: ${APP_TENANCY_TENANTS:matessa,adventure}
   ratelimit:
     # Only these peers' X-Forwarded-For is trusted when identifying a client; see
     # ClientIpResolver. Loopback + the private ranges Docker bridges use, so the storefront

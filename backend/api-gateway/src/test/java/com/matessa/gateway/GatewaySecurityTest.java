@@ -57,15 +57,28 @@ class GatewaySecurityTest {
     int port;
 
     private RestClient client() {
-        return RestClient.builder()
+        return client("matessa");
+    }
+
+    private RestClient client(String store) {
+        RestClient.Builder builder = RestClient.builder();
+        if (store != null) {
+            builder.defaultHeader("X-Tenant-ID", store);
+        }
+        return builder
                 .baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }) // never throw; assert on status
                 .build();
     }
 
     private String validToken() throws Exception {
+        return tokenFor("matessa");
+    }
+
+    private String tokenFor(String store) throws Exception {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .subject("1")
+                .claim("tenant", store)
                 .claim("roles", List.of("CUSTOMER"))
                 .issuer("matessa-user-service")
                 .issueTime(Date.from(Instant.now()))
@@ -104,5 +117,35 @@ class GatewaySecurityTest {
     void publicAuthRoute_withoutToken_notRejectedAtEdge() {
         ResponseEntity<String> response = client().post().uri("/api/auth/login").retrieve().toEntity(String.class);
         assertThat(response.getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void apiCall_withoutStore_isRefusedAtEdge() {
+        ResponseEntity<String> response = client(null).get().uri("/api/products").retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void apiCall_withUnknownStore_isRefusedAtEdge() {
+        ResponseEntity<String> response = client("public").get().uri("/api/products").retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void tokenFromAnotherStore_isRefusedAtEdge() throws Exception {
+        // A valid, correctly signed matessa token replayed against the adventure store.
+        ResponseEntity<String> response = client("adventure").get().uri("/api/users/me")
+                .header("Authorization", "Bearer " + tokenFor("matessa"))
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void guestStorefrontForms_areNotRejectedAtEdge() {
+        // Contact and newsletter posts come from signed-out shoppers; they used to get a 401 here.
+        ResponseEntity<String> contact = client().post().uri("/api/contact").retrieve().toEntity(String.class);
+        ResponseEntity<String> subscribe = client().post().uri("/api/subscribers").retrieve().toEntity(String.class);
+        assertThat(contact.getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(subscribe.getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
     }
 }

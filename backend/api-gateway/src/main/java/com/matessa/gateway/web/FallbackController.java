@@ -24,6 +24,15 @@ public class FallbackController {
                         "message", "user-service is temporarily unavailable, please retry shortly"));
     }
 
+    @RequestMapping("/fallback/commercial-service")
+    public ResponseEntity<Map<String, Object>> commercialServiceFallback() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of(
+                        "status", 503,
+                        "error", "Service Unavailable",
+                        "message", "The catalog is temporarily unavailable, please retry shortly"));
+    }
+
     @RequestMapping("/fallback/order-service")
     public ResponseEntity<Map<String, Object>> orderServiceFallback() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

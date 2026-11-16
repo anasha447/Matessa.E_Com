@@ -14,10 +14,12 @@ import org.springframework.security.converter.RsaKeyConverters;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import com.matessa.gateway.tenant.StoreGuardFilter;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -28,7 +30,8 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.List;
 
 /**
- * Edge security: validate the RS256 JWT (signature + expiry) once at the gateway and
+ * Edge security: validate the RS256 JWT (signature + expiry + issuer) once at the gateway,
+ * require a known store on every API call and pin the token to it (StoreGuardFilter), and
  * reject junk early. Public auth endpoints pass through without a token; every other
  * route requires a valid token. Services still re-validate (defence in depth).
  * The gateway holds only the PUBLIC key — never the signing key.
@@ -37,7 +40,8 @@ import java.util.List;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   @Value("${app.tenancy.tenants}") List<String> stores) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -53,11 +57,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/media/**").permitAll() // public product images (WebP)
                         // guest shopping: price a cart, preview a coupon, check out, and track without an account
                         .requestMatchers(HttpMethod.POST, "/api/cart/price", "/api/coupons/validate", "/api/orders/guest").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/orders/track").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/track", "/api/orders/payment-methods").permitAll()
+                        // public storefront forms: contact message, newsletter sign-up
+                        .requestMatchers(HttpMethod.POST, "/api/contact", "/api/subscribers").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/error", "/fallback/**").permitAll() // surface real errors / fallbacks, not a masked 401
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                // After the JWT is verified: require a known store and pin the token to it.
+                .addFilterAfter(new StoreGuardFilter(stores), BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 
