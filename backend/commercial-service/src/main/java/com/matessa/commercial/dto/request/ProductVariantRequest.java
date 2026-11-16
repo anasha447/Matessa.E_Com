@@ -10,6 +10,7 @@ public record ProductVariantRequest(
         String sku,
         String size,
         String color,
+        @jakarta.validation.constraints.DecimalMin(value = "0.0", message = "priceOverride cannot be negative")
         BigDecimal priceOverride,                 // null = use the product base price
         @NotNull @Min(0) Integer stockQuantity,
         Integer restockLevel

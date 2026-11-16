@@ -33,7 +33,7 @@ public interface CommercialClient {
     @PostMapping("/internal/reservations")
     ReservationResult reserve(@RequestBody ReservationRequest request);
 
-    /** Hands a reservation back when the order does not complete (e.g. payment declined). */
-    @PostMapping("/internal/reservations/release")
-    void releaseReservation(@RequestBody ReservationRequest request);
+    /** Hands a reservation back when the order does not complete. Idempotent; unknown id is a no-op. */
+    @PostMapping("/internal/reservations/{reservationId}/release")
+    void releaseReservation(@PathVariable("reservationId") String reservationId);
 }

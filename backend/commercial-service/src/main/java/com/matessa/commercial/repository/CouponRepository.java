@@ -13,6 +13,15 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
     Optional<Coupon> findByCode(String code);
 
     /**
+     * Locks the coupon row for the rest of the transaction. Checking a customer's prior uses
+     * and recording a new one happen under this lock, so two concurrent checkouts by the same
+     * customer cannot both pass the per-customer limit.
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Coupon c where c.code = :code")
+    Optional<Coupon> lockByCode(@Param("code") String code);
+
+    /**
      * Consumes one use, but only if one is left.
      *
      * <p>maxUses was previously checked when the coupon was *validated* and then incremented

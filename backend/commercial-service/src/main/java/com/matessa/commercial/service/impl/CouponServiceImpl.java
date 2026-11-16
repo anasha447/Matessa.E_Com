@@ -167,6 +167,10 @@ public class CouponServiceImpl implements CouponService {
     }
 
     private void apply(Coupon coupon, CouponRequest request) {
+        if (request.discountType() == com.matessa.commercial.entity.DiscountType.PERCENTAGE
+                && request.discountValue().compareTo(HUNDRED) > 0) {
+            throw new BadRequestException("A percentage discount cannot exceed 100");
+        }
         coupon.setCode(request.code());
         coupon.setDiscountType(request.discountType());
         coupon.setDiscountValue(request.discountValue());

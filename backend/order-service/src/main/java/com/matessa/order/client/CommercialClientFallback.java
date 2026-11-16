@@ -44,13 +44,12 @@ public class CommercialClientFallback implements FallbackFactory<CommercialClien
             }
 
             @Override
-            public void releaseReservation(ReservationRequest request) {
+            public void releaseReservation(String reservationId) {
                 // Nothing to throw towards: the caller is already compensating a failure and
-                // must not be derailed. Log loudly instead - this is stock left held, which a
-                // human (or a future reconciliation job) has to put back.
-                log.error("commercial-service unavailable releasing a reservation; stock may stay "
-                        + "held for lines {}: {}",
-                        request == null ? null : request.items(), cause.toString());
+                // must not be derailed. The reservation stays HELD until commercial-service's
+                // expiry job returns it (reservation.ttl-minutes).
+                log.error("commercial-service unavailable releasing reservation {}; its expiry job "
+                        + "will return the stock: {}", reservationId, cause.toString());
             }
         };
     }

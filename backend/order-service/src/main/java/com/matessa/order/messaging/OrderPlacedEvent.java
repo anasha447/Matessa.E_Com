@@ -14,7 +14,9 @@ public record OrderPlacedEvent(
         Long userId,
         String couponCode,
         List<Line> items,
-        Instant occurredAt
+        Instant occurredAt,
+        /** The commercial-service reservation behind the order (null for older orders). */
+        String reservationId
 ) {
     public record Line(Long productVariantId, int quantity) {
     }

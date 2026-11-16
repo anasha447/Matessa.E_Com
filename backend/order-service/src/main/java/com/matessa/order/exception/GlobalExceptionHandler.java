@@ -42,6 +42,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    /** Idempotency-key answers carry a code the storefront acts on ("check your orders"). */
+    @ExceptionHandler(IdempotencyException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotency(IdempotencyException ex, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatus());
+        return ResponseEntity.status(status).body(new ErrorResponse(Instant.now(), status.value(),
+                status.getReasonPhrase(), ex.getMessage(), request.getRequestURI(), null, ex.getCode()));
+    }
+
     /** Optimistic-lock conflict (e.g. two concurrent updates to the same order). */
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<ErrorResponse> handleOptimisticLock(ObjectOptimisticLockingFailureException ex,

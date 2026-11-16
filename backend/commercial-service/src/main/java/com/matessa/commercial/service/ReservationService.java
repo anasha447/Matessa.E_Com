@@ -25,6 +25,15 @@ public interface ReservationService {
      */
     StockReservationResponse reserve(StockReservationRequest request);
 
-    /** Compensates a reservation whose order did not complete. */
-    void release(StockReservationRequest request);
+    /**
+     * Gives a HELD reservation's stock and coupon use back. Idempotent: returns false (and does
+     * nothing) when the reservation is unknown or already confirmed/released.
+     */
+    boolean release(String reservationId);
+
+    /** The order exists (OrderPlaced consumed): the reservation is no longer at risk of expiry. */
+    void confirm(String reservationId);
+
+    /** A cancelled order gave its coupon use back; it no longer counts toward the customer limit. */
+    void forgetCouponUse(String reservationId);
 }

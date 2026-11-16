@@ -8,8 +8,12 @@ import java.util.List;
  * decoupled.
  */
 public record ReservationRequest(
+        /** Generated here before the call: makes reserve and release idempotent. */
+        String reservationId,
         List<Line> items,
         String couponCode,
+        /** u:<userId> or e:<lower-cased guest email>; per-customer coupon limit key. */
+        String customerKey,
 
         /**
          * How many times this customer has already used {@code couponCode}, or null for a

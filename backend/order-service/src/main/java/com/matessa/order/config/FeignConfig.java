@@ -47,6 +47,20 @@ public class FeignConfig {
         };
     }
 
+    /**
+     * Service-to-service key for commercial-service's /internal/** endpoints (checkout
+     * reservations), which carry no user token. Only order-service is given INTERNAL_API_KEY.
+     */
+    @Bean
+    public RequestInterceptor internalApiKeyInterceptor(
+            @org.springframework.beans.factory.annotation.Value("${app.internal.api-key:}") String apiKey) {
+        return template -> {
+            if (!apiKey.isBlank() && template.path().startsWith("/internal/")) {
+                template.header("X-Internal-Key", apiKey);
+            }
+        };
+    }
+
     @Bean
     public RequestInterceptor authForwardingInterceptor() {
         return template -> {

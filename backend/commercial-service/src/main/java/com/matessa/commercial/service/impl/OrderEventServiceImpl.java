@@ -36,17 +36,20 @@ public class OrderEventServiceImpl implements OrderEventService {
     private final ProcessedEventRepository processedEventRepository;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final com.matessa.commercial.service.ReservationService reservationService;
 
     public OrderEventServiceImpl(ProductVariantRepository variantRepository,
                                  CouponRepository couponRepository,
                                  ProcessedEventRepository processedEventRepository,
                                  OutboxRepository outboxRepository,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 com.matessa.commercial.service.ReservationService reservationService) {
         this.variantRepository = variantRepository;
         this.couponRepository = couponRepository;
         this.processedEventRepository = processedEventRepository;
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
+        this.reservationService = reservationService;
     }
 
     /**
@@ -73,6 +76,9 @@ public class OrderEventServiceImpl implements OrderEventService {
         if (processedEventRepository.existsById(event.eventId())) {
             return;   // already handled (at-least-once delivery)
         }
+        if (event.reservationId() != null) {
+            reservationService.confirm(event.reservationId()); // no longer at risk of expiry
+        }
         markProcessed(event.eventId());
         log.info("OrderPlaced {}: confirmed ({} line(s) already reserved at checkout)",
                 event.orderNumber(), event.items().size());
@@ -94,6 +100,9 @@ public class OrderEventServiceImpl implements OrderEventService {
             }
         }
         releaseCoupon(event.couponCode());
+        if (event.reservationId() != null) {
+            reservationService.forgetCouponUse(event.reservationId()); // no longer counts for the customer
+        }
         markProcessed(event.eventId());
         log.info("OrderCancelled {}: restored stock", event.orderNumber());
     }

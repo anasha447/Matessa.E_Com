@@ -10,6 +10,6 @@ import java.util.List;
  * render live, discount-aware prices from the same source of truth as the server cart.
  */
 public record CartPriceRequest(
-        @NotNull List<@Valid CartItemRequest> items
+        @NotNull @jakarta.validation.constraints.Size(max = 50, message = "At most 50 different items") List<@Valid CartItemRequest> items
 ) {
 }

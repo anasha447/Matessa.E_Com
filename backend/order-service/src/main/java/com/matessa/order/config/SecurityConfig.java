@@ -36,7 +36,7 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // guest shopping: no account required to price a cart, check out, or track
                         .requestMatchers(HttpMethod.POST, "/api/cart/price", "/api/orders/guest").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/orders/track").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/track", "/api/orders/payment-methods").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

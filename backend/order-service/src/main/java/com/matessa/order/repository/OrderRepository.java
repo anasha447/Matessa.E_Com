@@ -23,4 +23,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByIdAndUserId(Long id, Long userId);
 
     long countByUserIdAndCouponCode(Long userId, String couponCode);
+
+    /** Guest coupon use, counted per (case-insensitive) email. */
+    @org.springframework.data.jpa.repository.Query("select count(o) from Order o where lower(o.guestEmail) = lower(:email) "
+            + "and o.couponCode = :code")
+    long countGuestCouponUses(@org.springframework.data.repository.query.Param("email") String email,
+                              @org.springframework.data.repository.query.Param("code") String couponCode);
 }

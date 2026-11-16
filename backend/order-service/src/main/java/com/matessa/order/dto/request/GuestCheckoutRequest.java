@@ -16,10 +16,10 @@ import java.util.List;
  */
 public record GuestCheckoutRequest(
         @NotBlank @Email String guestEmail,
-        @NotEmpty List<@Valid CartItemRequest> items,
+        @NotEmpty @jakarta.validation.constraints.Size(max = 50, message = "At most 50 different items per order") List<@Valid CartItemRequest> items,
         @NotNull @Valid ShippingAddressRequest shippingAddress,
         @NotNull PaymentMethod paymentMethod,
-        String couponCode,
-        String shippingMethod
+        @jakarta.validation.constraints.Size(max = 64) String couponCode,
+        @jakarta.validation.constraints.Size(max = 64) String shippingMethod
 ) {
 }

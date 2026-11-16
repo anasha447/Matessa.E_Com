@@ -37,6 +37,10 @@ public class Order {
     @Column(name = "guest_email")   // set only for guest orders; used for /track lookup
     private String guestEmail;
 
+    /** The commercial-service stock reservation this order consumed. */
+    @Column(name = "reservation_id", length = 36)
+    private String reservationId;
+
     @Column(name = "idempotency_key")   // client-supplied; unique when present (double-submit guard)
     private String idempotencyKey;
 

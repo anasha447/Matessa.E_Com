@@ -65,12 +65,11 @@ public class OrderServiceImpl implements OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 
-    // Customer-facing order id: "MA" + ddMMHHmmss in Indian wall-clock time,
-    // e.g. MA1407143207 for 14 Jul 14:32:07 IST. Seconds keep same-minute orders
-    // distinct; the existsByOrderNumber retry loop covers same-second collisions
-    // (and the rare year-later repeat) by rolling to the next second.
+    // Order number date part (Indian wall-clock day) and its random suffix alphabet.
     private static final DateTimeFormatter ORDER_NUMBER_FORMAT =
-            DateTimeFormatter.ofPattern("ddMMHHmmss").withZone(ZoneId.of("Asia/Kolkata"));
+            DateTimeFormatter.ofPattern("yyMMdd").withZone(ZoneId.of("Asia/Kolkata"));
+    private static final String CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
@@ -82,6 +81,8 @@ public class OrderServiceImpl implements OrderService {
     private final CommercialClient commercialClient;
     private final PaymentService paymentService;
     private final ObjectMapper objectMapper;
+    private final org.springframework.transaction.support.TransactionTemplate transactions;
+    private final IdempotencyStore idempotency;
 
     public OrderServiceImpl(CartRepository cartRepository,
                             CartItemRepository cartItemRepository,
@@ -92,7 +93,9 @@ public class OrderServiceImpl implements OrderService {
                             ProcessedEventRepository processedEventRepository,
                             CommercialClient commercialClient,
                             PaymentService paymentService,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            org.springframework.transaction.support.TransactionTemplate transactions,
+                            IdempotencyStore idempotency) {
         this.cartRepository = cartRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
@@ -103,178 +106,222 @@ public class OrderServiceImpl implements OrderService {
         this.commercialClient = commercialClient;
         this.paymentService = paymentService;
         this.objectMapper = objectMapper;
+        this.transactions = transactions;
+        this.idempotency = idempotency;
     }
 
+    /**
+     * Not @Transactional on purpose: checkout talks to commercial-service (reserve) and the
+     * payment provider, and must not hold a database connection or transaction open across
+     * those calls. Each local step runs in its own short transaction (see {@link #createOrder}).
+     */
     @Override
-    @Transactional
     public OrderResponse checkout(Long userId, CheckoutRequest request, String idempotencyKey) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new BadRequestException("Cart is empty"));
-        List<CartItem> cartItems = cartItemRepository.findByCartIdOrderByIdAsc(cart.getId());
-        if (cartItems.isEmpty()) {
+        List<CartItemRequest> lines = transactions.execute(tx -> {
+            Cart cart = cartRepository.findByUserId(userId)
+                    .orElseThrow(() -> new BadRequestException("Cart is empty"));
+            List<CartItem> cartItems = cartItemRepository.findByCartIdOrderByIdAsc(cart.getId());
+            return cartItems.stream()
+                    .map(ci -> new CartItemRequest(ci.getProductVariantId(), ci.getQuantity()))
+                    .toList();
+        });
+        if (lines == null || lines.isEmpty()) {
             throw new BadRequestException("Cart is empty");
         }
-        List<CartItemRequest> lines = cartItems.stream()
-                .map(ci -> new CartItemRequest(ci.getProductVariantId(), ci.getQuantity()))
-                .toList();
-        OrderResponse response = createOrder(userId, null, lines, request.shippingAddress(),
-                request.paymentMethod(), request.couponCode(), request.shippingMethod(), idempotencyKey);
-        cartItemRepository.deleteByCartId(cart.getId());
-        return response;
+        return createOrder(userId, null, lines, request.shippingAddress(), request.paymentMethod(),
+                request.couponCode(), request.shippingMethod(), idempotencyKey, true);
     }
 
     @Override
-    @Transactional
     public OrderResponse guestCheckout(GuestCheckoutRequest request, String idempotencyKey) {
         // Guests have no server cart — the lines come from the (client-side) guest cart and
         // are re-priced authoritatively here, exactly like a registered checkout.
-        return createOrder(null, request.guestEmail(), request.items(), request.shippingAddress(),
-                request.paymentMethod(), request.couponCode(), request.shippingMethod(), idempotencyKey);
+        return createOrder(null, request.guestEmail().trim().toLowerCase(java.util.Locale.ROOT), request.items(),
+                request.shippingAddress(), request.paymentMethod(), request.couponCode(),
+                request.shippingMethod(), idempotencyKey, false);
     }
 
-    /** Shared order-placement core for registered and guest checkout. Exactly one of
-     *  {@code userId}/{@code guestEmail} is set. Re-prices each line, validates stock,
-     *  charges (mock), and persists the order + items + outbox event in one transaction.
-     *  {@code idempotencyKey} (nullable) dedupes retried submits. */
+    /**
+     * Shared order placement for registered and guest checkout. Exactly one of
+     * {@code userId}/{@code guestEmail} is set.
+     *
+     * <ol>
+     *   <li>Idempotency: claim the key (or return the order it already produced).</li>
+     *   <li>Reserve stock + the coupon use on commercial-service, under a reservation id we
+     *       generate — so a timed-out call can still be released, and a retry is harmless.</li>
+     *   <li>Take payment.</li>
+     *   <li>Persist order + items + outbox event + idempotency result in ONE short transaction.</li>
+     * </ol>
+     * Any failure after step 2 — a declined card, a validation error, a failed commit — releases
+     * the reservation and frees the idempotency key. If even that release cannot be delivered,
+     * commercial-service's expiry job returns the stock later.
+     */
     private OrderResponse createOrder(Long userId, String guestEmail, List<CartItemRequest> lines,
                                       ShippingAddressRequest shippingAddress, PaymentMethod paymentMethod,
-                                      String couponCode, String shippingMethod, String idempotencyKey) {
+                                      String couponCode, String shippingMethod, String idempotencyKey,
+                                      boolean clearCart) {
         if (lines.isEmpty()) {
             throw new BadRequestException("Cart is empty");
         }
+        String customerKey = userId != null ? "u:" + userId : "e:" + guestEmail;
+        String normalisedCoupon = couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
 
-        // 0) Idempotency fast-return: a repeat with the same key hands back the original order —
-        //    no re-price, no second charge, no duplicate row.
-        //
-        //    The key is client-supplied and its unique index is global, so the result MUST be
-        //    re-checked against the caller before the order is handed back. Without that check,
-        //    anyone presenting someone else's key — including an unauthenticated guest-checkout
-        //    caller — receives that order in full: totals, line items, the shipping-address
-        //    snapshot and the payment transaction id.
-        //
-        //    A key that exists but belongs to someone else gets the same 409 as a genuine
-        //    duplicate-key collision further down, so the response cannot be used to probe
-        //    whether a given key exists.
+        // 1) Idempotency.
         String idemKey = (idempotencyKey == null || idempotencyKey.isBlank()) ? null : idempotencyKey.trim();
         if (idemKey != null) {
-            Optional<Order> existing = orderRepository.findByIdempotencyKey(idemKey);
-            if (existing.isPresent()) {
-                Order prior = existing.get();
-                if (!isSameRequester(prior, userId, guestEmail)) {
-                    throw new ConflictException("Duplicate order request — idempotency key already used.");
-                }
+            if (idemKey.length() > 80) {
+                throw new BadRequestException("Idempotency-Key is too long");
+            }
+            String hash = requestHash(lines, shippingAddress, paymentMethod, normalisedCoupon, shippingMethod);
+            Optional<Long> done = idempotency.begin(idemKey, customerKey, hash);
+            if (done.isPresent()) {
+                Order prior = orderRepository.findById(done.get())
+                        .orElseThrow(() -> new ConflictException("Duplicate order request — idempotency key already used."));
                 return toResponse(prior, orderItemRepository.findByOrderIdOrderByIdAsc(prior.getId()));
             }
         }
 
-        // 1) How many times this customer has already used the coupon. perUserLimit was
-        //    persisted and handed to clients but never actually enforced - the repository
-        //    method for this count existed with no callers. The count has to come from here
-        //    because order-service owns the order history; the limit it is compared against
-        //    belongs to commercial-service. So the count travels with the reservation and the
-        //    comparison happens there, inside the same transaction that claims the use.
-        //    Guests have no history to count, so the limit does not apply to them.
-        String normalisedCoupon = couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
-        Integer priorCouponUses = (userId != null && normalisedCoupon != null)
-                ? (int) orderRepository.countByUserIdAndCouponCode(userId, normalisedCoupon)
-                : null;
+        // Prior coupon uses from order history (orders placed before commercial-service kept
+        // its own redemption records); commercial compares under a lock on the coupon row.
+        Integer priorCouponUses = null;
+        if (normalisedCoupon != null) {
+            priorCouponUses = userId != null
+                    ? (int) orderRepository.countByUserIdAndCouponCode(userId, normalisedCoupon)
+                    : (int) orderRepository.countGuestCouponUses(guestEmail, normalisedCoupon);
+        }
 
-        // 2) Reserve stock and claim the coupon use BEFORE paying, in one transaction over on
-        //    commercial-service, which also prices the basket and returns what it reserved at.
-        //
-        //    The previous shape read stock here, charged the card, and left the actual
-        //    decrement to commercial-service consuming OrderPlaced up to two seconds later.
-        //    Nothing held the stock across that gap, so every concurrent buyer of the last
-        //    unit passed the read, every one was charged, and all but one order was cancelled
-        //    afterwards. Reserving first turns that into a 409 before any money moves.
-        //
-        //    It also replaces one Feign round trip per line with one for the whole basket.
+        // 2) Reserve. The id is ours, so even a reserve call that times out after commercial
+        //    committed it can be released by id.
+        String reservationId = UUID.randomUUID().toString();
         ReservationRequest reservationRequest = new ReservationRequest(
-                lines.stream()
-                        .map(line -> new ReservationRequest.Line(line.productVariantId(), line.quantity()))
-                        .toList(),
+                reservationId,
+                lines.stream().map(line -> new ReservationRequest.Line(line.productVariantId(), line.quantity())).toList(),
                 normalisedCoupon,
+                customerKey,
                 priorCouponUses);
-        ReservationResult reservation = commercialClient.reserve(reservationRequest);
-        // From here on the goods are already held, so every exit has to hand the
-        // reservation back: a declined card, a lost idempotency-key race, or a database
-        // failure part-way through persisting. commercial-service holds the reservation in
-        // its own database, so this service rolling back does not undo it.
-        //
-        // Not covered: the process dying between the reservation and this catch. That
-        // leaves stock held with no order behind it, and the durable fix is a
-        // reconciliation job that expires reservations - noted, not built.
+        ReservationResult reservation;
         try {
-            List<OrderItem> orderItems = new ArrayList<>();
-            List<OrderPlacedEvent.Line> eventLines = new ArrayList<>();
-            for (ReservationResult.Line line : reservation.lines()) {
-                OrderItem orderItem = new OrderItem();
-                orderItem.setProductVariantId(line.productVariantId());
-                orderItem.setProductNameSnapshot(line.productName());
-                orderItem.setSkuSnapshot(line.sku());
-                orderItem.setUnitPriceSnapshot(line.unitPrice());
-                orderItem.setQuantity(line.quantity());
-                orderItems.add(orderItem);
-                eventLines.add(new OrderPlacedEvent.Line(line.productVariantId(), line.quantity()));
+            reservation = commercialClient.reserve(reservationRequest);
+        } catch (RuntimeException ex) {
+            if (!(ex instanceof ConflictException)) {
+                releaseQuietly(reservationId); // timed out / unreachable: it may still have been made
             }
-            BigDecimal subtotal = reservation.subtotal().setScale(2, RoundingMode.HALF_UP);
-            BigDecimal discountAmount = reservation.discountAmount() == null
-                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-                    : reservation.discountAmount().setScale(2, RoundingMode.HALF_UP);
-            String appliedCoupon = reservation.couponCode();
-            BigDecimal total = reservation.total().setScale(2, RoundingMode.HALF_UP);
+            abandonQuietly(idemKey);
+            throw ex;
+        }
 
-            // 3) payment (mock). A decline is now a real failure rather than a PENDING order:
-            //    the stock is already held, so leaving it held behind an order nobody paid for
-            //    would quietly make it unsellable.
+        try {
+            // 3) Payment. A decline is a real failure: the stock is held, so it must go back.
+            BigDecimal total = reservation.total().setScale(2, RoundingMode.HALF_UP);
             PaymentResult payment = paymentService.charge(paymentMethod, total);
             if (payment.status() == PaymentStatus.FAILED) {
                 throw new BadRequestException("Payment was declined — the order was not placed.");
             }
-            OrderStatus status =
-                    payment.status() == PaymentStatus.COMPLETED ? OrderStatus.PAID : OrderStatus.PENDING;
 
-            // 4) persist the order + items + outbox event in one transaction
-            Order order = new Order();
-            order.setUserId(userId);
-            order.setGuestEmail(guestEmail);
-            order.setIdempotencyKey(idemKey);
-            order.setOrderNumber(generateOrderNumber());
-            order.setStatus(status);
-            order.setSubtotal(subtotal);
-            order.setDiscountAmount(discountAmount);
-            order.setTotal(total);
-            order.setCouponCode(appliedCoupon);
-            order.setShippingAddressSnapshot(toJson(shippingAddress));
-            order.setShippingState(normalizeState(shippingAddress.state()));
-            order.setPaymentStatus(payment.status());
-            order.setPaymentMethod(paymentMethod);
-            order.setTransactionId(payment.transactionId());
-            order.setShippingStatus(ShippingStatus.PENDING);
-            order.setShippingMethod(shippingMethod);
-            Order saved;
-            try {
-                // saveAndFlush forces the unique idempotency_key constraint to fire now: if a
-                // concurrent request with the same key committed first, this order loses the race.
-                saved = orderRepository.saveAndFlush(order);
-            } catch (DataIntegrityViolationException ex) {
-                throw new ConflictException("Duplicate order request — idempotency key already used.");
-            }
-
-            for (OrderItem orderItem : orderItems) {
-                orderItem.setOrderId(saved.getId());
-                orderItemRepository.save(orderItem);
-            }
-            recordHistory(saved, null, status, "Order placed", userId);
-
-            OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID().toString(), saved.getOrderNumber(),
-                    userId, appliedCoupon, eventLines, Instant.now());
-            enqueue(saved.getOrderNumber(), KafkaTopics.ORDER_PLACED, event);
-
-            return toResponse(saved, orderItems);
+            // 4) Persist everything in one short transaction.
+            OrderResponse response = transactions.execute(tx ->
+                    persistOrder(userId, guestEmail, reservation, reservationId, payment, paymentMethod,
+                            shippingAddress, shippingMethod, idemKey, clearCart));
+            log.info("Order {} placed (reservation {})", response.orderNumber(), reservationId);
+            return response;
         } catch (RuntimeException ex) {
-            releaseQuietly(reservationRequest);
+            releaseQuietly(reservationId);
+            abandonQuietly(idemKey);
             throw ex;
+        }
+    }
+
+    private OrderResponse persistOrder(Long userId, String guestEmail, ReservationResult reservation,
+                                       String reservationId, PaymentResult payment, PaymentMethod paymentMethod,
+                                       ShippingAddressRequest shippingAddress, String shippingMethod,
+                                       String idemKey, boolean clearCart) {
+        List<OrderItem> orderItems = new ArrayList<>();
+        List<OrderPlacedEvent.Line> eventLines = new ArrayList<>();
+        for (ReservationResult.Line line : reservation.lines()) {
+            OrderItem orderItem = new OrderItem();
+            orderItem.setProductVariantId(line.productVariantId());
+            orderItem.setProductNameSnapshot(line.productName());
+            orderItem.setSkuSnapshot(line.sku());
+            orderItem.setUnitPriceSnapshot(line.unitPrice());
+            orderItem.setQuantity(line.quantity());
+            orderItems.add(orderItem);
+            eventLines.add(new OrderPlacedEvent.Line(line.productVariantId(), line.quantity()));
+        }
+        BigDecimal subtotal = reservation.subtotal().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal discountAmount = reservation.discountAmount() == null
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : reservation.discountAmount().setScale(2, RoundingMode.HALF_UP);
+        String appliedCoupon = reservation.couponCode();
+        BigDecimal total = reservation.total().setScale(2, RoundingMode.HALF_UP);
+        OrderStatus status = payment.status() == PaymentStatus.COMPLETED ? OrderStatus.PAID : OrderStatus.PENDING;
+
+        Order order = new Order();
+        order.setUserId(userId);
+        order.setGuestEmail(guestEmail);
+        order.setIdempotencyKey(idemKey);
+        order.setReservationId(reservationId);
+        order.setOrderNumber(generateOrderNumber());
+        order.setStatus(status);
+        order.setSubtotal(subtotal);
+        order.setDiscountAmount(discountAmount);
+        order.setTotal(total);
+        order.setCouponCode(appliedCoupon);
+        order.setShippingAddressSnapshot(toJson(shippingAddress));
+        order.setShippingState(normalizeState(shippingAddress.state()));
+        order.setPaymentStatus(payment.status());
+        order.setPaymentMethod(paymentMethod);
+        order.setTransactionId(payment.transactionId());
+        order.setShippingStatus(ShippingStatus.PENDING);
+        order.setShippingMethod(shippingMethod);
+        Order saved;
+        try {
+            saved = orderRepository.saveAndFlush(order);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Duplicate order request — idempotency key already used.");
+        }
+        for (OrderItem orderItem : orderItems) {
+            orderItem.setOrderId(saved.getId());
+            orderItemRepository.save(orderItem);
+        }
+        recordHistory(saved, null, status, "Order placed", userId);
+
+        OrderPlacedEvent event = new OrderPlacedEvent(UUID.randomUUID().toString(), saved.getOrderNumber(),
+                userId, appliedCoupon, eventLines, Instant.now(), reservationId);
+        enqueue(saved.getOrderNumber(), KafkaTopics.ORDER_PLACED, event);
+
+        if (idemKey != null) {
+            idempotency.complete(idemKey, saved.getId());
+        }
+        if (clearCart && userId != null) {
+            cartRepository.findByUserId(userId).ifPresent(cart -> cartItemRepository.deleteByCartId(cart.getId()));
+        }
+        return toResponse(saved, orderItems);
+    }
+
+    /** SHA-256 of a canonical form of the purchase: same basket + details = same hash. */
+    private String requestHash(List<CartItemRequest> lines, ShippingAddressRequest address, PaymentMethod method,
+                               String coupon, String shippingMethod) {
+        java.util.TreeMap<Long, Integer> merged = new java.util.TreeMap<>();
+        lines.forEach(l -> merged.merge(l.productVariantId(), l.quantity(), Integer::sum));
+        String canonical = merged + "|" + toJson(address) + "|" + method + "|" + (coupon == null ? "" : coupon)
+                + "|" + (shippingMethod == null ? "" : shippingMethod);
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void abandonQuietly(String idemKey) {
+        if (idemKey == null) {
+            return;
+        }
+        try {
+            idempotency.abandon(idemKey);
+        } catch (RuntimeException ex) {
+            log.warn("Could not free idempotency key after a failed checkout: {}", ex.toString());
         }
     }
 
@@ -411,7 +458,7 @@ public class OrderServiceImpl implements OrderService {
             List<OrderCancelledEvent.Line> lines = orderItemRepository.findByOrderIdOrderByIdAsc(order.getId()).stream()
                     .map(item -> new OrderCancelledEvent.Line(item.getProductVariantId(), item.getQuantity())).toList();
             OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID().toString(), order.getOrderNumber(),
-                    order.getCouponCode(), lines, Instant.now());
+                    order.getCouponCode(), lines, Instant.now(), order.getReservationId());
             enqueue(order.getOrderNumber(), KafkaTopics.ORDER_CANCELLED, event);
         }
     }
@@ -467,10 +514,23 @@ public class OrderServiceImpl implements OrderService {
         processedEventRepository.save(processed);
     }
 
+    /**
+     * Customer-facing order number: store prefix + yyMMdd + 6 random Crockford base-32 characters,
+     * e.g. MA261116-7K3QXD. The old number was the timestamp to the second, so anyone could
+     * enumerate other people's orders (guest tracking needs only number + email). 30 random
+     * bits per day make guessing impractical; the loop covers the rare collision.
+     */
     private String generateOrderNumber() {
+        String store = com.matessa.order.tenant.TenantContext.getTenantId();
+        String prefix = store == null || store.length() < 2 ? "MA" : store.substring(0, 2).toUpperCase(java.util.Locale.ROOT);
+        String day = ORDER_NUMBER_FORMAT.format(Instant.now());
         String candidate;
         do {
-            candidate = "MA" + ORDER_NUMBER_FORMAT.format(Instant.now());
+            StringBuilder random = new StringBuilder(6);
+            for (int i = 0; i < 6; i++) {
+                random.append(CROCKFORD.charAt(RANDOM.nextInt(CROCKFORD.length())));
+            }
+            candidate = prefix + day + "-" + random;
         } while (orderRepository.existsByOrderNumber(candidate));
         return candidate;
     }
@@ -513,20 +573,6 @@ public class OrderServiceImpl implements OrderService {
                 order.getTrackingNumber(), lines, order.getCreatedAt());
     }
 
-    /** True when {@code order} was placed by the same requester that is now presenting its
-     *  idempotency key. Exactly one of {@code userId}/{@code guestEmail} is set on a checkout,
-     *  and the stored order likewise carries exactly one of them, so a registered caller can
-     *  never match a guest order and vice versa. Guest emails are compared case-insensitively
-     *  because the client controls their casing. */
-    private boolean isSameRequester(Order order, Long userId, String guestEmail) {
-        if (userId != null) {
-            return userId.equals(order.getUserId());
-        }
-        if (guestEmail != null && order.getGuestEmail() != null) {
-            return guestEmail.trim().equalsIgnoreCase(order.getGuestEmail().trim());
-        }
-        return false;
-    }
 
 
     /**
@@ -536,12 +582,12 @@ public class OrderServiceImpl implements OrderService {
      * and must not be derailed by the compensation. A failure here means stock stays held,
      * which is logged loudly by the Feign fallback.
      */
-    private void releaseQuietly(ReservationRequest reservationRequest) {
+    private void releaseQuietly(String reservationId) {
         try {
-            commercialClient.releaseReservation(reservationRequest);
+            commercialClient.releaseReservation(reservationId);
         } catch (RuntimeException ex) {
-            log.error("Failed to release a reservation after a failed checkout; stock may stay held: {}",
-                    ex.toString());
+            log.error("Failed to release reservation {} after a failed checkout; commercial-service's expiry "
+                    + "job will return the stock: {}", reservationId, ex.toString());
         }
     }
 }

@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 public record CheckoutRequest(
         @NotNull @Valid ShippingAddressRequest shippingAddress,
         @NotNull PaymentMethod paymentMethod,
-        String couponCode,
-        String shippingMethod
+        @jakarta.validation.constraints.Size(max = 64) String couponCode,
+        @jakarta.validation.constraints.Size(max = 64) String shippingMethod
 ) {
 }

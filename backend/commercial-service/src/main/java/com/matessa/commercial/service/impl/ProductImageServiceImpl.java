@@ -135,7 +135,23 @@ public class ProductImageServiceImpl implements ProductImageService {
         }
     }
 
+    /**
+     * An image row may point at this store's own uploads, at images from before the store
+     * split (/media/products/…), or at an external https URL — never at another store's files.
+     */
+    private static void checkUrl(String url) {
+        String store = com.matessa.commercial.tenant.TenantContext.getTenantId();
+        boolean own = url.matches("/media/" + java.util.regex.Pattern.quote(String.valueOf(store)) + "/[a-f0-9]{32}\\.webp")
+                || url.matches("/media/products/[a-f0-9]{32}\\.webp");
+        boolean external = url.startsWith("https://") && url.length() <= 2048 && !url.contains(" ");
+        if (!own && !external) {
+            throw new com.matessa.commercial.exception.BadRequestException(
+                    "Image URL must be an upload from this store or an https:// address");
+        }
+    }
+
     private void apply(ProductImage image, ProductImageRequest request) {
+        checkUrl(request.url());
         image.setVariantId(request.variantId());
         image.setUrl(request.url());
         image.setAltText(request.altText());

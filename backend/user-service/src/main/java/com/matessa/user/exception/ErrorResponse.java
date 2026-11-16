@@ -16,9 +16,16 @@ public record ErrorResponse(
         String error,
         String message,
         String path,
-        Map<String, String> fieldErrors
+        Map<String, String> fieldErrors,
+        /** Machine-readable reason when a client must react to it (e.g. IDEMPOTENCY_KEY_REUSED). */
+        String code
 ) {
+    public ErrorResponse(Instant timestamp, int status, String error, String message, String path,
+                         Map<String, String> fieldErrors) {
+        this(timestamp, status, error, message, path, fieldErrors, null);
+    }
+
     public static ErrorResponse of(int status, String error, String message, String path) {
-        return new ErrorResponse(Instant.now(), status, error, message, path, null);
+        return new ErrorResponse(Instant.now(), status, error, message, path, null, null);
     }
 }

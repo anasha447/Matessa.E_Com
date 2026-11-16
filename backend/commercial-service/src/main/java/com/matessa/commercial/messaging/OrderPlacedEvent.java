@@ -13,7 +13,9 @@ public record OrderPlacedEvent(
         Long userId,
         String couponCode,
         List<Line> items,
-        Instant occurredAt
+        Instant occurredAt,
+        /** Null for events published before reservations had ids. */
+        String reservationId
 ) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Line(Long productVariantId, int quantity) {

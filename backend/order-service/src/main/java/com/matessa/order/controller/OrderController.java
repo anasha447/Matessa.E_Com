@@ -40,9 +40,11 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final com.matessa.order.service.PaymentService paymentService;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService, com.matessa.order.service.PaymentService paymentService) {
         this.orderService = orderService;
+        this.paymentService = paymentService;
     }
 
     @PostMapping
@@ -58,6 +60,12 @@ public class OrderController {
     public OrderResponse guestCheckout(@Valid @RequestBody GuestCheckoutRequest request,
                                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         return orderService.guestCheckout(request, idempotencyKey);
+    }
+
+    /** Public: the payment methods this store accepts right now (COD-only until a real provider). */
+    @GetMapping("/payment-methods")
+    public java.util.Map<String, List<com.matessa.order.entity.PaymentMethod>> paymentMethods() {
+        return java.util.Map.of("methods", paymentService.supportedMethods());
     }
 
     /** Public guest-order tracking: order number + the email it was placed with. */

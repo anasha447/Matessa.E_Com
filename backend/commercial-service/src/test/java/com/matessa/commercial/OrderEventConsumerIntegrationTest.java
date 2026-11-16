@@ -48,6 +48,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class OrderEventConsumerIntegrationTest {
 
+    // Repositories are called directly from the test thread, which (unlike a request) has no
+    // store in context. Data access without one fails by design, so bind the test thread.
+    @org.junit.jupiter.api.BeforeEach
+    void bindStore() {
+        com.matessa.commercial.tenant.TenantContext.setTenantId("matessa");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void unbindStore() {
+        com.matessa.commercial.tenant.TenantContext.clear();
+    }
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("commercial");
@@ -156,7 +168,7 @@ class OrderEventConsumerIntegrationTest {
         // Two lines of the same variant used to be checked independently against the full
         // stock figure, so 2 x qty-1 both passed against a stock of 1 and the order was only
         // rejected after the card had been charged. They are merged before checking now.
-        assertThatThrownBy(() -> reservationService.reserve(new StockReservationRequest(
+        assertThatThrownBy(() -> reservationService.reserve(req(
                 List.of(new StockReservationRequest.Line(variantId, 1),
                         new StockReservationRequest.Line(variantId, 1)),
                 null, null)))
@@ -166,12 +178,12 @@ class OrderEventConsumerIntegrationTest {
                 .isEqualTo(1);
 
         // The one unit can still be reserved, exactly once.
-        assertThat(reservationService.reserve(new StockReservationRequest(
+        assertThat(reservationService.reserve(req(
                 List.of(new StockReservationRequest.Line(variantId, 1)), null, null)).lines())
                 .hasSize(1);
         assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isZero();
 
-        assertThatThrownBy(() -> reservationService.reserve(new StockReservationRequest(
+        assertThatThrownBy(() -> reservationService.reserve(req(
                 List.of(new StockReservationRequest.Line(variantId, 1)), null, null)))
                 .isInstanceOf(ConflictException.class);
     }
@@ -203,14 +215,14 @@ class OrderEventConsumerIntegrationTest {
 
         // First use succeeds and consumes the single available use.
         assertThat(reservationService.reserve(
-                new StockReservationRequest(List.of(line), single.getCode(), 0)).couponCode())
+                req(List.of(line), single.getCode(), 0)).couponCode())
                 .isEqualTo(single.getCode());
 
         // maxUses is now spent. This used to pass: the limit was checked while validating and
         // then incremented unconditionally at redemption, in a later transaction, so two
         // checkouts racing through validation both got the discount.
         assertThatThrownBy(() -> reservationService.reserve(
-                new StockReservationRequest(List.of(line), single.getCode(), 0)))
+                req(List.of(line), single.getCode(), 0)))
                 .isInstanceOf(ConflictException.class);
         assertThat(couponRepository.findByCode(single.getCode()).orElseThrow().getUsedCount())
                 .as("a refused claim must not inflate usedCount")
@@ -229,17 +241,23 @@ class OrderEventConsumerIntegrationTest {
         couponRepository.save(reusable);
 
         assertThatThrownBy(() -> reservationService.reserve(
-                new StockReservationRequest(List.of(line), reusable.getCode(), 2)))
+                req(List.of(line), reusable.getCode(), 2)))
                 .as("a customer at their per-customer limit is refused")
                 .isInstanceOf(ConflictException.class);
         assertThat(reservationService.reserve(
-                new StockReservationRequest(List.of(line), reusable.getCode(), 1)).couponCode())
+                req(List.of(line), reusable.getCode(), 1)).couponCode())
                 .as("one use left is still allowed")
                 .isEqualTo(reusable.getCode());
         // Guests carry no history, so the per-customer limit does not apply to them.
         assertThat(reservationService.reserve(
-                new StockReservationRequest(List.of(line), reusable.getCode(), null)).couponCode())
+                req(List.of(line), reusable.getCode(), null)).couponCode())
                 .isEqualTo(reusable.getCode());
+    }
+
+    /** Old-style call sites: a fresh reservation id; a prior-use count means a known customer. */
+    private static StockReservationRequest req(List<StockReservationRequest.Line> items, String coupon, Integer priorUses) {
+        return new StockReservationRequest(UUID.randomUUID().toString(), items, coupon,
+                priorUses == null ? null : "u:" + UUID.randomUUID(), priorUses);
     }
 
     private String orderPlaced(String eventId, String orderNumber, Long variantId, int qty, String coupon) {
