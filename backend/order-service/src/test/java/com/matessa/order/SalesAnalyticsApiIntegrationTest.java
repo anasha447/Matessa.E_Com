@@ -79,14 +79,17 @@ class SalesAnalyticsApiIntegrationTest {
     @Autowired OrderRepository orderRepository;
     @Autowired OrderItemRepository orderItemRepository;
     @Autowired OrderStatusHistoryRepository statusHistoryRepository;
+    @Autowired com.matessa.order.analytics.AnalyticsViewRefresher viewRefresher;
 
     private RestClient client() {
-        return RestClient.builder().baseUrl("http://localhost:" + port)
+        return RestClient.builder()
+                .defaultHeader("X-Tenant-ID", "matessa").baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }).build();
     }
 
     private String token(String role, String subject) throws Exception {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder().subject(subject).claim("roles", List.of(role))
+        JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer("matessa-user-service").subject(subject).claim("tenant", "matessa")
+                .claim("roles", List.of(role))
                 .expirationTime(Date.from(Instant.now().plusSeconds(300))).build();
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
         jwt.sign(new RSASSASigner(signingKey));
@@ -148,6 +151,9 @@ class SalesAnalyticsApiIntegrationTest {
         statusHistoryRepository.save(shipped);
 
         String manager = token("MANAGER", "1");
+        // The top-products / trend read model is a materialized view refreshed on a schedule;
+        // refresh it now rather than depend on the 30 s timer having fired.
+        viewRefresher.refresh();
 
         ResponseEntity<Map<String, Object>> res = client().get().uri("/api/analytics/sales")
                 .header("Authorization", "Bearer " + manager).retrieve().toEntity(MAP);

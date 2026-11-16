@@ -1,5 +1,8 @@
 package com.matessa.commercial.config;
 
+import com.matessa.commercial.tenant.TenantContext;
+import com.matessa.commercial.tenant.TenantProperties;
+
 import com.matessa.commercial.dto.response.CategoryResponse;
 import com.matessa.commercial.dto.response.ProductResponse;
 import com.matessa.commercial.dto.response.ProductVariantResponse;
@@ -44,9 +47,12 @@ public class CacheConfig {
     public static final String CATEGORIES = "categories";
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper,
+                                         TenantProperties tenants) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
-                .prefixCacheNameWith("cat:v1:")
+                // Store-scoped keys: cat:v1:<store>:<cache>::<key>. Evaluated per operation, so each
+                // store reads/evicts only its own entries.
+                .computePrefixWith(cacheName -> "cat:v1:" + currentStore(tenants) + ":" + cacheName + "::")
                 .disableCachingNullValues();
 
         JavaType variantListType = objectMapper.getTypeFactory()
@@ -67,6 +73,12 @@ public class CacheConfig {
                 .cacheDefaults(base.entryTtl(Duration.ofMinutes(5)))
                 .withInitialCacheConfigurations(perCache)
                 .build();
+    }
+
+    /** Same fallback as the Hibernate tenant resolver, so cache and schema always agree. */
+    private static String currentStore(TenantProperties tenants) {
+        String store = TenantContext.getTenantId();
+        return store != null ? store : tenants.defaultTenant();
     }
 
     private static RedisCacheConfiguration withValue(RedisCacheConfiguration cfg, Jackson2JsonRedisSerializer<?> ser) {

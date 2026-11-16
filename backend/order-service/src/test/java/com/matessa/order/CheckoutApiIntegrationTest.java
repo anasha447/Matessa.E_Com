@@ -100,12 +100,14 @@ class CheckoutApiIntegrationTest {
     int port;
 
     private RestClient client() {
-        return RestClient.builder().baseUrl("http://localhost:" + port)
+        return RestClient.builder()
+                .defaultHeader("X-Tenant-ID", "matessa").baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }).build();
     }
 
     private String token(String subject) throws Exception {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder().subject(subject).claim("roles", List.of("CUSTOMER"))
+        JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer("matessa-user-service").subject(subject).claim("tenant", "matessa")
+                .claim("roles", List.of("CUSTOMER"))
                 .expirationTime(Date.from(Instant.now().plusSeconds(300))).build();
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
         jwt.sign(new RSASSASigner(signingKey));

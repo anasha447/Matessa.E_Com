@@ -6,4 +6,9 @@ const GATEWAY = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:9080"
 ).replace(/\/+$/, "");
 
+// Which store this storefront is. Every gateway call carries it as X-Tenant-ID; the backend
+// maps it to that store's own schema (products, users, admins, orders are all per store).
+export const STORE_ID = process.env.NEXT_PUBLIC_TENANT_ID ?? "adventure";
+export const STORE_HEADERS = { "X-Tenant-ID": STORE_ID } as const;
+
 export const API_BASE_URL = typeof window === "undefined" ? GATEWAY : "/api/bff";

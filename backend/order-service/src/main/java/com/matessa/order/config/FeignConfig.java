@@ -1,5 +1,7 @@
 package com.matessa.order.config;
 
+import com.matessa.order.tenant.TenantContext;
+
 import com.matessa.order.client.CommercialErrorDecoder;
 import feign.RequestInterceptor;
 import feign.codec.ErrorDecoder;
@@ -24,6 +26,25 @@ public class FeignConfig {
     @Bean
     public ErrorDecoder commercialErrorDecoder() {
         return new CommercialErrorDecoder();
+    }
+
+    /**
+     * Forwards the caller's store to commercial-service. Reads the thread context first
+     * (Kafka/background), then the request attribute — Feign runs on the circuit breaker's
+     * thread, where only the request attributes are propagated.
+     */
+    @Bean
+    public RequestInterceptor tenantForwardingInterceptor() {
+        return template -> {
+            String tenant = TenantContext.getTenantId();
+            if (tenant == null
+                    && RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+                tenant = (String) attributes.getRequest().getAttribute(TenantContext.REQUEST_ATTRIBUTE);
+            }
+            if (tenant != null) {
+                template.header(TenantContext.HEADER, tenant);
+            }
+        };
     }
 
     @Bean

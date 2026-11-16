@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { GATEWAY, REFRESH_COOKIE, clearAuthCookies } from "@/lib/session/cookies";
+import { GATEWAY, REFRESH_COOKIE, clearAuthCookies, STORE_HEADERS } from "@/lib/session/cookies";
 
 /** Revoke the refresh token at the gateway and clear the session cookies. */
 export async function POST() {
@@ -8,7 +8,7 @@ export async function POST() {
   if (refresh) {
     await fetch(`${GATEWAY}/api/auth/logout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: refresh }),
       cache: "no-store",
     }).catch(() => {});

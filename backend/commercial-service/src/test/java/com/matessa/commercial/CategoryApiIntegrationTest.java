@@ -66,14 +66,16 @@ class CategoryApiIntegrationTest {
 
     private RestClient client() {
         return RestClient.builder()
+                .defaultHeader("X-Tenant-ID", "matessa")
                 .baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { })
                 .build();
     }
 
     private String token(String role) throws Exception {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+        JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer("matessa-user-service")
                 .subject("1")
+                .claim("tenant", "matessa")
                 .claim("roles", List.of(role))
                 .expirationTime(Date.from(Instant.now().plusSeconds(300)))
                 .build();

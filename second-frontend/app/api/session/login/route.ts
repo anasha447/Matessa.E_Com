@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { GATEWAY, setAuthCookies } from "@/lib/session/cookies";
+import { GATEWAY, setAuthCookies, STORE_HEADERS } from "@/lib/session/cookies";
 
 /** Exchange email/password for a session: calls the gateway and stores the token pair
  *  in httpOnly cookies. Never returns the tokens to the client. */
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   const upstream = await fetch(`${GATEWAY}/api/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
     cache: "no-store",
   });
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   let mustChangePassword = false;
   try {
     const me = await fetch(`${GATEWAY}/api/users/me`, {
-      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      headers: { ...STORE_HEADERS, Authorization: `Bearer ${tokens.accessToken}` },
       cache: "no-store",
     });
     if (me.ok) {

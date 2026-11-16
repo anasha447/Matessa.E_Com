@@ -76,6 +76,8 @@ jwt:
 # In Docker this is a mounted volume so images survive rebuilds; locally it defaults
 # to a project-relative dir.
 app:
+  tenancy:
+    tenants: ${APP_TENANCY_TENANTS:matessa,adventure}   # one Postgres schema per store
   media:
     dir: ${APP_MEDIA_DIR:./media/products}
     webp-quality: ${APP_MEDIA_WEBP_QUALITY:0.82}

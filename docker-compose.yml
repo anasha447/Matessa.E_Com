@@ -48,12 +48,12 @@ services:
     container_name: matessa-db
     environment:
       POSTGRES_DB: users
-      POSTGRES_USER: ${USERS_DB_USER}          # bootstrap superuser + owner of `users`
-      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD}
-      COMMERCIAL_DB_USER: ${COMMERCIAL_DB_USER}   # consumed by the init script
-      COMMERCIAL_DB_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
-      ORDERS_DB_USER: ${ORDERS_DB_USER}
-      ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD}
+      POSTGRES_USER: ${USERS_DB_USER:?set USERS_DB_USER in .env}          # bootstrap superuser + owner of `users`
+      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD:?set USERS_DB_PASSWORD in .env}
+      COMMERCIAL_DB_USER: ${COMMERCIAL_DB_USER:?set COMMERCIAL_DB_USER in .env}   # consumed by the init script
+      COMMERCIAL_DB_PASSWORD: ${COMMERCIAL_DB_PASSWORD:?set COMMERCIAL_DB_PASSWORD in .env}
+      ORDERS_DB_USER: ${ORDERS_DB_USER:?set ORDERS_DB_USER in .env}
+      ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD:?set ORDERS_DB_PASSWORD in .env}
     ports:
       - "5533:5432"           # host 5533 -> all three DBs (connect by db name)
     volumes:
@@ -62,7 +62,7 @@ services:
     networks:
       - matessa-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${USERS_DB_USER} -d users"]
+      test: ["CMD-SHELL", "pg_isready -U ${USERS_DB_USER:?set USERS_DB_USER in .env} -d users"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,8 +75,9 @@ services:
     environment:
       SERVER_PORT: 8081
       SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/users   # shared server, `users` db
-      SPRING_DATASOURCE_USERNAME: ${USERS_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${USERS_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: ${USERS_DB_USER:?set USERS_DB_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${USERS_DB_PASSWORD:?set USERS_DB_PASSWORD in .env}
+      APP_TENANCY_TENANTS: ${APP_TENANCY_TENANTS:-matessa,adventure}   # one schema per store in this DB
       TRACING_SAMPLING: "0"        # tracing off (Tempo removed) — no OTLP export attempts
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"   # register the bridge IP so lb:// is reachable across the compose network
@@ -86,8 +87,12 @@ services:
       EUREKA_CLIENT_REGISTRY_FETCH_INTERVAL_SECONDS: "5"
       JWT_PRIVATE_KEY_PATH: file:/app/keys/jwt-private.pem
       JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@matessa.com}   # seeded on first boot (see .env)
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}                    # unset -> seeding skipped
+      # One initial admin per store, seeded on boot if missing (idempotent). Required: no
+      # password ships in this file or the image.
+      MATESSA_ADMIN_EMAIL: ${MATESSA_ADMIN_EMAIL:-admin@matessa.com}
+      MATESSA_ADMIN_PASSWORD: ${MATESSA_ADMIN_PASSWORD:?set MATESSA_ADMIN_PASSWORD in .env}
+      ADVENTURE_ADMIN_EMAIL: ${ADVENTURE_ADMIN_EMAIL:-admin@adventuredose.com}
+      ADVENTURE_ADMIN_PASSWORD: ${ADVENTURE_ADMIN_PASSWORD:?set ADVENTURE_ADMIN_PASSWORD in .env}
       # Same JDK-25 G1 SIGSEGV/pause insurance as commercial & order-service. Without it,
       # GC pauses here made the gateway circuit breaker time out (503s on login/password).
       JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -XX:TieredStopAtLevel=1 -Xmx400m"   # C1-only JIT = faster cold start; bounded heap: 5 JVMs share a 4 GB VM; a RAM-% heap over-commits and the OOM killer strikes
@@ -162,8 +167,9 @@ services:
     environment:
       SERVER_PORT: 8082
       SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/commercial   # shared server, `commercial` db
-      SPRING_DATASOURCE_USERNAME: ${COMMERCIAL_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${COMMERCIAL_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: ${COMMERCIAL_DB_USER:?set COMMERCIAL_DB_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${COMMERCIAL_DB_PASSWORD:?set COMMERCIAL_DB_PASSWORD in .env}
+      APP_TENANCY_TENANTS: ${APP_TENANCY_TENANTS:-matessa,adventure}   # one schema per store in this DB
       TRACING_SAMPLING: "0"        # tracing off (Tempo removed)
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"   # register the bridge IP so lb:// is reachable
@@ -232,8 +238,9 @@ services:
     environment:
       SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/orders   # shared server, `orders` db
-      SPRING_DATASOURCE_USERNAME: ${ORDERS_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${ORDERS_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: ${ORDERS_DB_USER:?set ORDERS_DB_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${ORDERS_DB_PASSWORD:?set ORDERS_DB_PASSWORD in .env}
+      APP_TENANCY_TENANTS: ${APP_TENANCY_TENANTS:-matessa,adventure}   # one schema per store in this DB
       TRACING_SAMPLING: "0"        # tracing off (Tempo removed)
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
@@ -314,9 +321,10 @@ services:
 
   # ---- second-frontend (Next.js storefront #2) — the PUBLIC entry point for brand 2 ----
   # Same shape as `frontend` above: prod-profile only, same-origin /api/bff, gateway
-  # reached server-side over the internal network. The two storefronts share one backend;
-  # which tenant a request belongs to is decided server-side at the gateway from the
-  # request host, never from a header the browser can set.
+  # reached server-side over the internal network. The two storefronts share one backend
+  # but not data: each is a separate store (its own schema in every service DB). The store
+  # id is fixed in the app (STORE_ID, lib/api/config.ts) and sent server-side by the BFF as
+  # X-Tenant-ID; a token issued by one store is rejected by the other.
   second-frontend:
     build: ./second-frontend
     container_name: matessa-second-frontend
@@ -344,7 +352,7 @@ services:
   # Guarded by the "tools" profile so it never starts in dev (`up -d`) or prod
   # (`--profile prod`). Start it on demand with:
   #     docker compose --profile tools up -d pgadmin
-  # then open http://localhost:5050 and log in (email/password below). When registering
+  # then open http://localhost:5050 and log in with PGADMIN_EMAIL / PGADMIN_PASSWORD from .env. When registering
   # the database inside pgAdmin, use the INTERNAL network address — NOT localhost:5533 —
   # because pgAdmin runs in a container on the same Docker network:
   #     Host=matessa-db  Port=5432  User=$USERS_DB_USER  Password=$USERS_DB_PASSWORD   (values from your .env)
@@ -353,8 +361,8 @@ services:
     container_name: matessa-pgadmin
     profiles: ["tools"]
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@matessa.com    # pgAdmin login (rejects .local/reserved domains)
-      PGADMIN_DEFAULT_PASSWORD: pgadmin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@matessa.com}   # pgAdmin login (rejects .local/reserved domains)
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"   # local convenience: no extra master password
     ports:
       - "5050:80"           # web UI at http://localhost:5050

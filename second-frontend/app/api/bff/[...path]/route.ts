@@ -8,6 +8,7 @@ import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
   GATEWAY,
+  STORE_HEADERS,
   refreshTokens,
   setAuthCookies,
 } from "@/lib/session/cookies";
@@ -40,6 +41,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
       method: req.method,
       headers: {
         Accept: "application/json",
+        ...STORE_HEADERS, // set server-side: the browser cannot choose another store
         ...(rawBody && rawBody.byteLength > 0 && contentType ? { "Content-Type": contentType } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),

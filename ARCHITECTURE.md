@@ -107,6 +107,33 @@ Not in v1. When read load justifies it:
 - **Soft deletes** (`active = false`) on anything another service references (products, variants, users) — never hard-delete, so historical orders never dangle.
 - JSONB columns are fine for snapshots (e.g. shipping address on an order).
 
+### 8.1 Stores: one schema per store `[v1]`
+
+One backend serves several independent stores (today `matessa` and `adventure`, listed in
+`APP_TENANCY_TENANTS`). Each store is its **own Postgres schema inside every service's
+database** — its own products, customers, admins, carts, orders, coupons and analytics.
+Nothing is shared between stores except the code and the infrastructure.
+
+- **Which store:** every API request carries `X-Tenant-ID: <store>`. Each storefront's
+  server-side BFF sets it from a constant (`STORE_ID`, `lib/api/config.ts`); the browser
+  never chooses. A missing or unknown store is rejected with 400 — there is no default.
+- **Database:** each service's `TenantFilter` puts the store in context; Hibernate's
+  multi-tenant connection provider sets the connection's `search_path` to that schema.
+  Flyway migrates every store schema on boot and creates a new store's schema automatically.
+- **Auth:** user-service signs the store into the JWT (`tenant` claim). Every service rejects
+  a token whose store differs from the request's, so a login is valid in one store only.
+- **Async and background work:** Kafka records carry the store in an `X-Tenant-ID` header
+  (stamped by the outbox pollers, restored by a record interceptor); outbox pollers and the
+  analytics refresher loop over every store; Feign forwards the header; Redis catalog keys
+  are prefixed with the store.
+- **Code:** each service has its own copy of the `tenant` package (§15 — no shared module).
+- **Adding a store:** append its id to `APP_TENANCY_TENANTS`, give user-service
+  `APP_ADMINS_<STORE>_EMAIL` / `APP_ADMINS_<STORE>_PASSWORD` (the two existing stores use the
+  shorter `MATESSA_ADMIN_*` / `ADVENTURE_ADMIN_*` aliases), restart. Schemas and the first
+  admin are created on boot.
+- **Upgrading a pre-store database:** `backend/db-init/upgrades/001-split-stores.sql` moves the
+  old `public` data into the `matessa` schema (run once per DB, services stopped).
+
 ---
 
 ## 9. Docker & networking `[v1]`

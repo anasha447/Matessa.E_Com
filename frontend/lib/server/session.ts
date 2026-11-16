@@ -2,7 +2,7 @@
 // and calls the gateway with a Bearer header. Returns null when unauthenticated or on
 // error so pages can redirect / render a signed-out state.
 import { cookies } from "next/headers";
-import { ACCESS_COOKIE, GATEWAY } from "@/lib/session/cookies";
+import { ACCESS_COOKIE, GATEWAY, STORE_HEADERS } from "@/lib/session/cookies";
 import type { UserResponse } from "@/lib/api";
 
 export async function getAccessToken(): Promise<string | null> {
@@ -14,7 +14,7 @@ export async function getCurrentUser(): Promise<UserResponse | null> {
   if (!token) return null;
   try {
     const r = await fetch(`${GATEWAY}/api/users/me`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      headers: { ...STORE_HEADERS, Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
     });
     if (!r.ok) return null;
@@ -30,7 +30,7 @@ export async function serverGet<T>(path: string): Promise<T | null> {
   if (!token) return null;
   try {
     const r = await fetch(`${GATEWAY}${path}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      headers: { ...STORE_HEADERS, Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
     });
     if (!r.ok) return null;

@@ -23,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -79,7 +80,15 @@ class OrderEventConsumerIntegrationTest {
     @Autowired ProductVariantRepository variantRepository;
     @Autowired CouponRepository couponRepository;
     @Autowired KafkaTemplate<String, String> kafkaTemplate;
+
+    /** Every event carries its store, as the outbox pollers stamp it in production. */
+    private static org.apache.kafka.clients.producer.ProducerRecord<String, String> storeRecord(String topic, String value) {
+        var record = new org.apache.kafka.clients.producer.ProducerRecord<String, String>(topic, value);
+        record.headers().add("X-Tenant-ID", "matessa".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return record;
+    }
     @Autowired ReservationService reservationService;
+    @Autowired TransactionTemplate transactions;
 
     @Test
     void orderPlaced_confirmsWithoutDecrementingAgain_andCancelReleases() throws Exception {
@@ -106,26 +115,29 @@ class OrderEventConsumerIntegrationTest {
         // Simulate the checkout that preceded this event: stock and the coupon use are taken
         // synchronously now, by ReservationService, before the payment is charged. By the time
         // OrderPlaced is consumed there is nothing left to decide.
-        variantRepository.reserveStock(variantId, 3);
-        couponRepository.claimUse(coupon.getCode());
+        // Modifying queries need a transaction, exactly as they have inside ReservationService.
+        transactions.executeWithoutResult(tx -> {
+            variantRepository.reserveStock(variantId, 3);
+            couponRepository.claimUse(coupon.getCode());
+        });
         assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(7);
         assertThat(couponRepository.findById(coupon.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
 
         // OrderPlaced is now a confirmation: it must NOT decrement again. This is the
         // regression that matters - while this handler also decremented, the stock for one
         // order could be taken twice.
-        kafkaTemplate.send("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode()));
+        kafkaTemplate.send(storeRecord("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode())));
         Thread.sleep(2500);
         assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(7);
         assertThat(couponRepository.findById(coupon.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
 
         // duplicate eventId -> ignored (idempotent)
-        kafkaTemplate.send("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode()));
+        kafkaTemplate.send(storeRecord("OrderPlaced", orderPlaced("evt-1", "AD-1", variantId, 3, coupon.getCode())));
         Thread.sleep(2500);
         assertThat(variantRepository.findById(variantId).orElseThrow().getStockQuantity()).isEqualTo(7);
 
         // OrderCancelled still does real work: it puts the reservation back.
-        kafkaTemplate.send("OrderCancelled", orderCancelled("evt-2", "AD-1", variantId, 3, coupon.getCode()));
+        kafkaTemplate.send(storeRecord("OrderCancelled", orderCancelled("evt-2", "AD-1", variantId, 3, coupon.getCode())));
         assertThat(awaitStock(variantId, 10, Duration.ofSeconds(30))).isEqualTo(10);
         assertThat(couponRepository.findById(coupon.getId()).orElseThrow().getUsedCount()).isEqualTo(0);
     }

@@ -65,6 +65,19 @@ class OrderRejectionConsumerIntegrationTest {
     @Autowired
     KafkaTemplate<String, String> kafkaTemplate;
 
+
+    /** Every event carries its store, as the outbox pollers stamp it in production. */
+
+    private static org.apache.kafka.clients.producer.ProducerRecord<String, String> storeRecord(String topic, String value) {
+
+        var record = new org.apache.kafka.clients.producer.ProducerRecord<String, String>(topic, value);
+
+        record.headers().add("X-Tenant-ID", "matessa".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        return record;
+
+    }
+
     @Test
     void orderRejected_cancelsTheOrder() throws Exception {
         String orderNumber = "AD-REJ-" + UUID.randomUUID().toString().substring(0, 8);
@@ -83,7 +96,7 @@ class OrderRejectionConsumerIntegrationTest {
 
         String payload = "{\"eventId\":\"rej-1\",\"orderNumber\":\"" + orderNumber
                 + "\",\"reason\":\"Insufficient stock\",\"occurredAt\":\"" + Instant.now() + "\"}";
-        kafkaTemplate.send("OrderRejected", payload);
+        kafkaTemplate.send(storeRecord("OrderRejected", payload));
 
         Order cancelled = awaitStatus(orderNumber, OrderStatus.CANCELLED, Duration.ofSeconds(30));
         assertThat(cancelled).isNotNull();

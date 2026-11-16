@@ -1,5 +1,6 @@
 package com.matessa.order.analytics;
 
+import com.matessa.order.tenant.TenantProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,27 +15,36 @@ import java.util.List;
  * cannot run inside a transaction block. CONCURRENTLY keeps the dashboard readable during the
  * refresh (each view has a unique index). The dashboard is eventually consistent by the refresh
  * interval — fine for analytics; checkout writes never wait on these reads.
+ *
+ * <p>Every store has its own copy of the views in its own schema, so each is refreshed by
+ * schema-qualified name. Store ids are validated identifiers ({@link TenantProperties}),
+ * which is what makes the string concatenation safe.
  */
 @Component
 public class AnalyticsViewRefresher {
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsViewRefresher.class);
+
     private static final List<String> VIEWS = List.of("mv_top_products", "mv_top_customers", "mv_revenue_trend");
 
     private final JdbcTemplate jdbc;
+    private final TenantProperties tenants;
 
-    public AnalyticsViewRefresher(JdbcTemplate jdbc) {
+    public AnalyticsViewRefresher(JdbcTemplate jdbc, TenantProperties tenants) {
         this.jdbc = jdbc;
+        this.tenants = tenants;
     }
 
     @Scheduled(fixedDelayString = "${analytics.refresh-interval-ms:120000}",
             initialDelayString = "${analytics.refresh-initial-delay-ms:30000}")
     public void refresh() {
-        for (String view : VIEWS) {
-            try {
-                jdbc.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY " + view);
-            } catch (RuntimeException ex) {
-                log.warn("Analytics view refresh failed for {}: {}", view, ex.toString());
+        for (String store : tenants.tenants()) {
+            for (String view : VIEWS) {
+                try {
+                    jdbc.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY " + store + "." + view);
+                } catch (RuntimeException ex) {
+                    log.warn("Analytics view refresh failed for {}.{}: {}", store, view, ex.toString());
+                }
             }
         }
     }

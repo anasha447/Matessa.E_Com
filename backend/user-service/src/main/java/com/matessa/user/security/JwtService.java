@@ -1,5 +1,7 @@
 package com.matessa.user.security;
 
+import com.matessa.user.tenant.TenantContext;
+
 import com.matessa.user.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
@@ -36,9 +38,18 @@ public class JwtService {
                 .expiresAt(now.plusSeconds(accessTokenTtlSeconds))
                 .subject(String.valueOf(user.getId()))
                 .claim("roles", roles)
+                .claim(TenantContext.CLAIM, requireTenant())
                 .build();
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+    }
+
+    private static String requireTenant() {
+        String tenant = TenantContext.getTenantId();
+        if (tenant == null) {
+            throw new IllegalStateException("Cannot issue a token outside a store context");
+        }
+        return tenant;
     }
 
     public long getAccessTokenTtlSeconds() {

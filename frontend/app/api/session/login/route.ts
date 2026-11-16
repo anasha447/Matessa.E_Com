@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { GATEWAY, setAuthCookies } from "@/lib/session/cookies";
+import { GATEWAY, setAuthCookies, STORE_HEADERS } from "@/lib/session/cookies";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -12,7 +12,7 @@ async function loginUpstream(email: string, password: string): Promise<Response 
     try {
       const r = await fetch(`${GATEWAY}/api/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
         cache: "no-store",
         signal: AbortSignal.timeout(15000),
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   let mustChangePassword = false;
   try {
     const me = await fetch(`${GATEWAY}/api/users/me`, {
-      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      headers: { ...STORE_HEADERS, Authorization: `Bearer ${tokens.accessToken}` },
       cache: "no-store",
     });
     if (me.ok) {

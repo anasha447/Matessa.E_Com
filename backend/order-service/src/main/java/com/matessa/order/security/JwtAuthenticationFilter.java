@@ -18,6 +18,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
+
+import com.matessa.order.tenant.TenantContext;
 
 /**
  * Validates the RS256 access token on every request (defence in depth — every service
@@ -45,6 +48,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 Jwt jwt = jwtDecoder.decode(token);
+                // A token is valid only in the store that issued it (schema-per-store isolation).
+                if (!Objects.equals(jwt.getClaimAsString(TenantContext.CLAIM), TenantContext.getTenantId())) {
+                    throw new JwtException("Token was issued for another store");
+                }
                 Long userId = Long.valueOf(jwt.getSubject());
                 List<String> roles = jwt.getClaimAsStringList("roles");
                 List<SimpleGrantedAuthority> authorities = roles == null

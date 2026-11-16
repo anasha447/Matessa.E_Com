@@ -48,10 +48,18 @@ jwt:
   refresh-token-ttl-seconds: ${JWT_REFRESH_TTL:604800}   # 7 days
   issuer: ${JWT_ISSUER:matessa-user-service}          # signed into every token; validated by every service
 
-# Initial admin seeding (first boot only; idempotent). Credentials come from the
-# environment — no default password is shipped. Leave ADMIN_PASSWORD unset to skip.
+# Stores served by this deployment. Each id is also a Postgres schema in this service's DB.
 app:
+  tenancy:
+    tenants: ${APP_TENANCY_TENANTS:matessa,adventure}
+  # Initial admin per store (seeded on boot if missing; idempotent). No default password is
+  # shipped — a store whose password is unset is skipped. Disable with ADMIN_SEED_ENABLED=false.
   admin:
-    email: ${ADMIN_EMAIL:admin@matessa.com}
-    password: ${ADMIN_PASSWORD:}
     seed-enabled: ${ADMIN_SEED_ENABLED:true}
+  admins:
+    matessa:
+      email: ${MATESSA_ADMIN_EMAIL:admin@matessa.com}
+      password: ${MATESSA_ADMIN_PASSWORD:}
+    adventure:
+      email: ${ADVENTURE_ADMIN_EMAIL:admin@adventuredose.com}
+      password: ${ADVENTURE_ADMIN_PASSWORD:}

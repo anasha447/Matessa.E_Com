@@ -10,27 +10,61 @@
 # This override removes those publications. Only the gateway and the two storefronts stay
 # reachable; everything else is on the internal Docker network only.
 #
+# It also hardens the runtime:
+#   restart: always       a crashed or OOM-killed container restarts by itself, and the whole
+#                         stack comes back after a host reboot.
+#   mem_limit             one runaway service cannot starve the others (heaps are already capped
+#                         with -Xmx in the base file; the limit leaves room for off-heap memory).
+#   Swagger/OpenAPI off   no public map of every endpoint.
+#   actuator health,info  metrics and gateway internals are never exposed.
+#
 # Usage — this is the deployment command:
 #     docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
 #
 # Note `!reset` needs Compose v2.24+. The gateway keeps 9080 so a reverse proxy can reach it;
 # bind it to localhost (127.0.0.1:9080:8080) if the proxy runs on the same host.
 
+x-spring-prod: &spring-prod
+  SPRINGDOC_API_DOCS_ENABLED: "false"
+  SPRINGDOC_SWAGGER_UI_ENABLED: "false"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+
 services:
   matessa-db:
     ports: !reset []
+    restart: always
 
   redis:
     ports: !reset []
+    restart: always
+
+  kafka:
+    restart: always
 
   eureka-server:
     ports: !reset []
+    restart: always
+
+  api-gateway:
+    restart: always
+    mem_limit: 600m
+    environment:
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
 
   user-service:
     ports: !reset []
+    restart: always
+    mem_limit: 700m
+    environment: *spring-prod
 
   commercial-service:
     ports: !reset []
+    restart: always
+    mem_limit: 700m
+    environment: *spring-prod
 
   order-service:
     ports: !reset []
+    restart: always
+    mem_limit: 700m
+    environment: *spring-prod

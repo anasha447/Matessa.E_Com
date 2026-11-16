@@ -2,6 +2,9 @@ package com.matessa.order.messaging;
 
 import com.matessa.order.entity.OutboxEvent;
 import com.matessa.order.repository.OutboxRepository;
+import com.matessa.order.tenant.KafkaTenancy;
+import com.matessa.order.tenant.TenantContext;
+import com.matessa.order.tenant.TenantProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -24,17 +27,25 @@ public class OutboxPoller {
 
     private final OutboxRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final TenantProperties tenants;
 
-    public OutboxPoller(OutboxRepository outboxRepository, KafkaTemplate<String, String> kafkaTemplate) {
+    public OutboxPoller(OutboxRepository outboxRepository, KafkaTemplate<String, String> kafkaTemplate,
+                        TenantProperties tenants) {
+        this.tenants = tenants;
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
     }
 
     @Scheduled(fixedDelayString = "${outbox.poll-interval-ms:2000}")
     public void publishPending() {
+        // Each store has its own outbox table (its own schema): drain them one at a time.
+        tenants.tenants().forEach(store -> TenantContext.runAs(store, this::publishPendingForCurrentStore));
+    }
+
+    private void publishPendingForCurrentStore() {
         for (OutboxEvent event : outboxRepository.findTop50ByPublishedAtIsNullOrderByIdAsc()) {
             try {
-                kafkaTemplate.send(event.getEventType(), event.getAggregateId(), event.getPayload())
+                kafkaTemplate.send(KafkaTenancy.record(event.getEventType(), event.getAggregateId(), event.getPayload()))
                         .get(10, TimeUnit.SECONDS);
                 event.setPublishedAt(Instant.now());
                 outboxRepository.save(event);

@@ -2,6 +2,9 @@
 // cookies on the Next origin — never exposed to client JS. The BFF proxy and route
 // handlers read them and talk to the gateway with a Bearer header.
 import type { NextResponse } from "next/server";
+import { STORE_HEADERS } from "@/lib/api/config";
+
+export { STORE_HEADERS };
 
 export const GATEWAY = (
   process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:9080"
@@ -52,7 +55,7 @@ export async function refreshTokens(refreshToken: string): Promise<TokenPair | n
   try {
     const r = await fetch(`${GATEWAY}/api/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
       cache: "no-store",
     });

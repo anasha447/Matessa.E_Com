@@ -5,7 +5,7 @@
 //  - normalize any non-2xx into a typed ApiError; return parsed JSON otherwise
 //
 // Endpoint modules call `http.get/post/put/del`; nothing else builds requests directly.
-import { API_BASE_URL } from './config';
+import { API_BASE_URL, STORE_HEADERS } from './config';
 import { ApiError } from './errors';
 import { toQueryString, type QueryParams } from './query';
 import { getTokenStore } from './tokenStore';
@@ -38,9 +38,7 @@ async function refreshAccessToken(): Promise<string | null> {
       try {
         const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json',
-            'X-Tenant-ID': process.env.NEXT_PUBLIC_TENANT_ID || 'second_schema'
-           },
+          headers: { ...STORE_HEADERS, 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
         if (!res.ok) {
@@ -96,9 +94,7 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
   const store = getTokenStore();
 
   const send = async (token: string | null): Promise<Response> => {
-    const headers: Record<string, string> = { Accept: 'application/json',
-      'X-Tenant-ID': process.env.NEXT_PUBLIC_TENANT_ID || 'second_schema',
-       ...extraHeaders };
+    const headers: Record<string, string> = { ...STORE_HEADERS, Accept: 'application/json', ...extraHeaders };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (token) headers['Authorization'] = `Bearer ${token}`;
     return fetch(url, {

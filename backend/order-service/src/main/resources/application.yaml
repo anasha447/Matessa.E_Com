@@ -83,3 +83,8 @@ resilience4j:
       default:
         timeout-duration: 3s
         cancel-running-future: true
+
+# Stores served by this deployment; each id is a Postgres schema in this service's DB.
+app:
+  tenancy:
+    tenants: ${APP_TENANCY_TENANTS:matessa,adventure}

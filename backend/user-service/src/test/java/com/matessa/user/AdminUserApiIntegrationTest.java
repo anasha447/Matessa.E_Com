@@ -79,12 +79,14 @@ class AdminUserApiIntegrationTest {
     int port;
 
     private RestClient client() {
-        return RestClient.builder().baseUrl("http://localhost:" + port)
+        return RestClient.builder()
+                .defaultHeader("X-Tenant-ID", "matessa").baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }).build();
     }
 
     private String token(long subject, String role) throws Exception {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder().subject(String.valueOf(subject)).claim("roles", List.of(role))
+        JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer("matessa-user-service").subject(String.valueOf(subject)).claim("tenant", "matessa")
+                .claim("roles", List.of(role))
                 .expirationTime(Date.from(Instant.now().plusSeconds(300))).build();
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
         jwt.sign(new RSASSASigner(signingKey));

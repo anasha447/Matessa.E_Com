@@ -44,8 +44,8 @@ class UserApiIntegrationTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("eureka.client.enabled", () -> "false");
-        registry.add("app.admin.email", () -> "seed-admin@test.local");
-        registry.add("app.admin.password", () -> "SeedPass123!");
+        registry.add("app.admins.matessa.email", () -> "seed-admin@test.local");
+        registry.add("app.admins.matessa.password", () -> "SeedPass123!");
 
         KeyPair keyPair = KeyPairGenerator.getInstance("RSA").genKeyPair();
         Path dir = Files.createTempDirectory("jwt-test-keys");
@@ -70,6 +70,7 @@ class UserApiIntegrationTest {
     @BeforeEach
     void setUp() {
         client = RestClient.builder()
+                .defaultHeader("X-Tenant-ID", "matessa")
                 .baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }) // never throw; assert on status
                 .build();

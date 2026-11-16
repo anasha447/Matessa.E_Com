@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { GATEWAY, setAuthCookies } from "@/lib/session/cookies";
+import { GATEWAY, setAuthCookies, STORE_HEADERS } from "@/lib/session/cookies";
 
 /** Register a CUSTOMER, then log them straight in (sets session cookies). */
 export async function POST(req: NextRequest) {
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   const reg = await fetch(`${GATEWAY}/api/auth/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, firstName, lastName, phone: body.phone ?? null }),
     cache: "no-store",
   });
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   // Auto-login the new account.
   const login = await fetch(`${GATEWAY}/api/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
     cache: "no-store",
   });

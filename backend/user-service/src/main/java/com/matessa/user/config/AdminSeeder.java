@@ -3,24 +3,29 @@ package com.matessa.user.config;
 import com.matessa.user.entity.Role;
 import com.matessa.user.entity.User;
 import com.matessa.user.repository.UserRepository;
+import com.matessa.user.tenant.TenantContext;
+import com.matessa.user.tenant.TenantProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Seeds an initial ADMIN (also granted MANAGER) on first boot so the catalog and users
- * can be managed through the API without hand-editing the database.
+ * Seeds one initial ADMIN (also granted MANAGER) per store on boot, so each store's catalog
+ * and users can be managed without hand-editing its schema.
  *
- * <p>Runs after Flyway + JPA are ready. Idempotent: if a user with the configured admin
- * email already exists, it does nothing on every subsequent boot. Credentials come from
- * {@code app.admin.*} (environment-overridable) — no default password is shipped, so if
- * {@code ADMIN_PASSWORD} is unset the seeder logs a warning and skips. Disable entirely
- * with {@code app.admin.seed-enabled=false}.
+ * <p>Credentials come from {@code app.admins.<store>.email|password} (env
+ * {@code <STORE>_ADMIN_EMAIL} / {@code <STORE>_ADMIN_PASSWORD}); no default password is
+ * shipped, so a store whose password is unset is skipped with a warning. Idempotent: an
+ * existing account with that email is left untouched. Disable with {@code app.admin.seed-enabled=false}.
+ *
+ * <p>Each store is seeded in its own transaction opened <em>after</em> the store is put in
+ * context — Hibernate picks the schema when the session opens.
  */
 @Component
 public class AdminSeeder implements ApplicationRunner {
@@ -29,48 +34,55 @@ public class AdminSeeder implements ApplicationRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TransactionTemplate transactions;
+    private final TenantProperties tenants;
+    private final Environment env;
     private final boolean enabled;
-    private final String email;
-    private final String password;
 
     public AdminSeeder(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       @Value("${app.admin.seed-enabled:true}") boolean enabled,
-                       @Value("${app.admin.email:admin@matessa.com}") String email,
-                       @Value("${app.admin.password:}") String password) {
+                       TransactionTemplate transactions,
+                       TenantProperties tenants,
+                       Environment env,
+                       @Value("${app.admin.seed-enabled:true}") boolean enabled) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.transactions = transactions;
+        this.tenants = tenants;
+        this.env = env;
         this.enabled = enabled;
-        this.email = email;
-        this.password = password;
     }
 
     @Override
-    @Transactional
     public void run(ApplicationArguments args) {
         if (!enabled) {
             return;
         }
-        if (password == null || password.isBlank()) {
-            log.warn("Admin seeding enabled but app.admin.password is empty — skipping. "
-                    + "Set ADMIN_PASSWORD to seed the initial admin '{}'.", email);
-            return;
+        for (String store : tenants.tenants()) {
+            String email = env.getProperty("app.admins." + store + ".email");
+            String password = env.getProperty("app.admins." + store + ".password");
+            if (email == null || email.isBlank() || password == null || password.isBlank()) {
+                log.warn("No admin credentials configured for store '{}' — skipping seeding. "
+                        + "Set {}_ADMIN_EMAIL and {}_ADMIN_PASSWORD.", store, store.toUpperCase(), store.toUpperCase());
+                continue;
+            }
+            TenantContext.runAs(store, () -> transactions.executeWithoutResult(tx -> seed(store, email, password)));
         }
+    }
+
+    private void seed(String store, String email, String password) {
         if (userRepository.existsByEmail(email)) {
             return; // already present — no-op on every subsequent boot
         }
-
         User admin = new User();
         admin.setEmail(email);
         admin.setPasswordHash(passwordEncoder.encode(password));
-        admin.setFirstName("Matessa");
+        admin.setFirstName(Character.toUpperCase(store.charAt(0)) + store.substring(1));
         admin.setLastName("Admin");
         admin.setEnabled(true);
         admin.getRoles().add(Role.ADMIN);
         admin.getRoles().add(Role.MANAGER);
         userRepository.save(admin);
-
-        log.warn("Seeded initial admin '{}' (ADMIN + MANAGER). Change this password "
-                + "immediately in any shared environment.", email);
+        log.warn("Seeded initial admin '{}' for store '{}' (ADMIN + MANAGER).", email, store);
     }
 }
