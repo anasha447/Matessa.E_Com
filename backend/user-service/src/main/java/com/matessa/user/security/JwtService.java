@@ -31,13 +31,19 @@ public class JwtService {
 
     public String issueAccessToken(User user) {
         Instant now = Instant.now();
-        List<String> roles = user.getRoles().stream().map(Enum::name).toList();
+        // While a temporary password is still in place the token carries NO roles, so every
+        // service refuses staff endpoints on its own (role checks) until the password is changed.
+        // Only "who am I" and "change my password" work, which need authentication alone.
+        List<String> roles = user.isMustChangePassword()
+                ? List.of()
+                : user.getRoles().stream().map(Enum::name).toList();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(issuer)
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(accessTokenTtlSeconds))
                 .subject(String.valueOf(user.getId()))
                 .claim("roles", roles)
+                .claim("pwd_change", user.isMustChangePassword())
                 .claim(TenantContext.CLAIM, requireTenant())
                 .build();
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();

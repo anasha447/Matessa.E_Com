@@ -38,11 +38,12 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public AdminUserResponse createStaff(CreateStaffRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException("Email already registered: " + request.email());
+        String email = com.matessa.user.util.Emails.normalize(request.email());
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException("An account with this email already exists.");
         }
         User user = new User();
-        user.setEmail(request.email());
+        user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFirstName(request.firstName());
         user.setLastName(request.lastName());

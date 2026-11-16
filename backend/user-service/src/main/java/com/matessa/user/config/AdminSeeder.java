@@ -59,7 +59,7 @@ public class AdminSeeder implements ApplicationRunner {
             return;
         }
         for (String store : tenants.tenants()) {
-            String email = env.getProperty("app.admins." + store + ".email");
+            String email = com.matessa.user.util.Emails.normalize(env.getProperty("app.admins." + store + ".email"));
             String password = env.getProperty("app.admins." + store + ".password");
             if (email == null || email.isBlank() || password == null || password.isBlank()) {
                 log.warn("No admin credentials configured for store '{}' — skipping seeding. "

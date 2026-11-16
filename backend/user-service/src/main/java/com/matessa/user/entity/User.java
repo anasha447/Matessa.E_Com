@@ -51,6 +51,14 @@ public class User {
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword = false;
 
+    /** Consecutive failed sign-ins; reset on success. */
+    @Column(name = "failed_logins", nullable = false)
+    private int failedLogins = 0;
+
+    /** Sign-in refused until this instant after too many failures (null = not locked). */
+    @Column(name = "locked_until")
+    private java.time.Instant lockedUntil;
+
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
     @Enumerated(EnumType.STRING)
