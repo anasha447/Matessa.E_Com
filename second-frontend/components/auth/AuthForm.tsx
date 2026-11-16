@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { safeNext } from "@/lib/utils/safeNext";
 import { useCart } from "@/components/cart/CartContext";
 import { ForcePasswordChange } from "./ForcePasswordChange";
 
@@ -16,7 +17,8 @@ export function AuthForm() {
   const { refresh: refreshCart } = useCart();
   // Explicit ?next wins (e.g. bounced from a protected page); otherwise we pick a
   // role-based default after login: staff → /admin, customer → /account.
-  const nextParam = params.get("next");
+  // Only a path on this site: ?next comes from a URL anyone can craft (open redirect).
+  const nextParam = safeNext(params.get("next"));
 
   const [mode, setMode] = useState<Mode>("login");
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "" });
@@ -131,7 +133,7 @@ export function AuthForm() {
       </p>
     </div>
     {forceChange && (
-      <ForcePasswordChange current={forceChange.current} onDone={() => go(forceChange.dest)} />
+      <ForcePasswordChange email={form.email} current={forceChange.current} onDone={() => go(forceChange.dest)} />
     )}
     </>
   );

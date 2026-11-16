@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./lib/security/headers.mjs";
 
 // Server-side gateway base (same resolution as lib/session/cookies.ts).
 const GATEWAY =
@@ -8,6 +9,11 @@ const nextConfig: NextConfig = {
   // Emit a self-contained server bundle (.next/standalone) so the app ships as a small
   // Docker image (see frontend/Dockerfile). No effect on `next dev`.
   output: "standalone",
+  // CSP, framing, sniffing, referrer and HSTS for every route (lib/security/headers.mjs).
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   async rewrites() {
     return [
       // Uploaded product images are stored as relative paths (/media/products/*.webp)

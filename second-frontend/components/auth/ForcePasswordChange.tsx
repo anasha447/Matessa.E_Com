@@ -8,12 +8,10 @@ import { api, ApiError } from "@/lib/api";
  *  out is to set a new password, after which onDone() sends them to their dashboard.
  *  `current` is the temp password they just authenticated with. */
 export function ForcePasswordChange({
+  email,
   current,
   onDone,
-}: {
-  current: string;
-  onDone: () => void;
-}) {
+}: { email: string; current: string; onDone: () => void }) {
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +26,18 @@ export function ForcePasswordChange({
     setBusy(true);
     try {
       await api.users.changePassword({ currentPassword: current, newPassword: pw });
+      // The change revokes every session, and tokens issued while a change is pending carry no
+      // staff roles. Sign in again with the new password to get a full session.
+      const relogin = await fetch("/api/session/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: pw }),
+      });
+      if (!relogin.ok) {
+        setError("Password updated — please sign in again with your new password.");
+        setBusy(false);
+        return;
+      }
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't update your password — try again.");

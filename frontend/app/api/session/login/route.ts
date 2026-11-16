@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { GATEWAY, setAuthCookies, STORE_HEADERS } from "@/lib/session/cookies";
+import { clientIp, rejectCrossSite } from "@/lib/server/guard";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -7,12 +8,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  *  (bad credentials) and returns immediately; a 5xx / timeout / network error (the
  *  gateway breaker tripping while userService warms up) is retried a few times. Returns
  *  the Response, or null if the upstream stayed unreachable. */
-async function loginUpstream(email: string, password: string): Promise<Response | null> {
+async function loginUpstream(email: string, password: string, ipHeader: Record<string, string>): Promise<Response | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const r = await fetch(`${GATEWAY}/api/auth/login`, {
         method: "POST",
-        headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
+        headers: { ...STORE_HEADERS, ...ipHeader, "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
         cache: "no-store",
         signal: AbortSignal.timeout(15000),
@@ -29,12 +30,16 @@ async function loginUpstream(email: string, password: string): Promise<Response 
 /** Exchange email/password for a session: calls the gateway and stores the token pair
  *  in httpOnly cookies. Never returns the tokens to the client. */
 export async function POST(req: NextRequest) {
+  const blocked = rejectCrossSite(req); // login-CSRF / cross-site form posts
+  if (blocked) return blocked;
+  const ip = clientIp(req);
+  const ipHeader: Record<string, string> = ip ? { "X-Forwarded-For": ip } : {};
   const { email, password } = await req.json().catch(() => ({}));
   if (!email || !password) {
     return NextResponse.json({ message: "Email and password are required." }, { status: 400 });
   }
 
-  const upstream = await loginUpstream(email, password);
+  const upstream = await loginUpstream(email, password, ipHeader);
   if (!upstream) {
     return NextResponse.json(
       { message: "Our servers are busy warming up — please try again in a moment." },

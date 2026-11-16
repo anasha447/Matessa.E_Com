@@ -6,6 +6,7 @@
 // with a temp password is forced through a password change first.
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { safeNext } from "@/lib/utils/safeNext";
 import { useCart } from "@/components/cart/CartContext";
 import { ForcePasswordChange } from "./ForcePasswordChange";
 
@@ -16,7 +17,8 @@ export function AuthForm() {
   const router = useRouter();
   const params = useSearchParams();
   const { refresh: refreshCart } = useCart();
-  const nextParam = params.get("next");
+  // Only a path on this site: ?next comes from a URL anyone can craft (open redirect).
+  const nextParam = safeNext(params.get("next"));
 
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : "login");
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "" });
@@ -132,7 +134,7 @@ export function AuthForm() {
         </form>
       </div>
 
-      {forceChange && <ForcePasswordChange current={forceChange.current} onDone={() => go(forceChange.dest)} />}
+      {forceChange && <ForcePasswordChange email={form.email} current={forceChange.current} onDone={() => go(forceChange.dest)} />}
     </>
   );
 }

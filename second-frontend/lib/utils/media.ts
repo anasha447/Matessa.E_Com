@@ -1,10 +1,7 @@
-// Uploaded product images are served by the backend gateway at /media/**, not the Next
-// origin. Prefix those with the public API base so <img src> resolves. External URLs and
-// local /design/* static assets are returned unchanged.
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:9080").replace(/\/+$/, "");
-
+// Uploaded product images are served by commercial-service behind the gateway at /media/**.
+// The browser never talks to the gateway: next.config.ts rewrites /media/* on this origin to
+// the gateway server-side, so a relative /media/... URL works as-is (and the gateway need
+// not be reachable from the internet). External URLs and local static assets are unchanged.
 export function mediaUrl(url: string): string {
-  if (!url) return url;
-  if (url.startsWith("/media/")) return API_BASE + url;
   return url;
 }

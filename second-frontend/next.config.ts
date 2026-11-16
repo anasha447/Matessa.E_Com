@@ -1,11 +1,17 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./lib/security/headers.mjs";
 
 // Server-side gateway base (same resolution as lib/session/cookies.ts).
 const GATEWAY =
   process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:9080";
 
 const nextConfig: NextConfig = {
-  output: "standalone", 
+  output: "standalone",
+  // CSP, framing, sniffing, referrer and HSTS for every route (lib/security/headers.mjs).
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   async rewrites() {
     return [
       // Uploaded product images are stored as relative paths (/media/products/*.webp)

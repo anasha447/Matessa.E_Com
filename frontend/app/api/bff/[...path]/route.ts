@@ -12,10 +12,19 @@ import {
   refreshTokens,
   setAuthCookies,
 } from "@/lib/session/cookies";
+import { allowedGatewayPath, clientIp, rejectCrossSite } from "@/lib/server/guard";
 
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
-  const target = `${GATEWAY}/${path.join("/")}${req.nextUrl.search}`;
+  // Only the gateway areas the storefront uses; never /api/auth (raw tokens), /actuator,
+  // /internal, or a path smuggled in with ".." / encoded slashes.
+  const gatewayPath = allowedGatewayPath(path);
+  if (!gatewayPath) {
+    return NextResponse.json({ status: 404, error: "Not Found", message: "No such endpoint." }, { status: 404 });
+  }
+  const blocked = rejectCrossSite(req);
+  if (blocked) return blocked;
+  const target = `${GATEWAY}${gatewayPath}${req.nextUrl.search}`;
 
   const jar = await cookies();
   const access = jar.get(ACCESS_COOKIE)?.value;
@@ -28,13 +37,10 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const contentType = req.headers.get("content-type");
   // Forward the client's idempotency key so a retried checkout dedupes at order-service.
   const idempotencyKey = req.headers.get("idempotency-key");
-  // Forward the client address so the gateway can rate-limit per client rather than per BFF
-  // instance. We can only pass on what reached us: a reverse proxy in front of this app has
-  // to set X-Forwarded-For. With nothing in front, this header is absent and the gateway
-  // falls back to this container's address — one shared bucket per storefront. The gateway
-  // only believes the header from trusted peers anyway (see ClientIpResolver), so a browser
-  // setting it directly achieves nothing.
-  const forwardedFor = req.headers.get("x-forwarded-for");
+  // The real client address for per-client rate limiting at the gateway. Only the value
+  // Caddy wrote is used (lib/server/guard.ts); a browser-supplied X-Forwarded-For is never
+  // passed on, or every request could claim a fresh address and a fresh rate-limit bucket.
+  const forwardedFor = clientIp(req);
 
   const send = (token?: string) =>
     fetch(target, {

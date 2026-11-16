@@ -1,9 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { GATEWAY, setAuthCookies, STORE_HEADERS } from "@/lib/session/cookies";
+import { clientIp, rejectCrossSite } from "@/lib/server/guard";
 
 /** Exchange email/password for a session: calls the gateway and stores the token pair
  *  in httpOnly cookies. Never returns the tokens to the client. */
 export async function POST(req: NextRequest) {
+  const blocked = rejectCrossSite(req); // login-CSRF / cross-site form posts
+  if (blocked) return blocked;
+  const ip = clientIp(req);
+  const ipHeader: Record<string, string> = ip ? { "X-Forwarded-For": ip } : {};
   const { email, password } = await req.json().catch(() => ({}));
   if (!email || !password) {
     return NextResponse.json({ message: "Email and password are required." }, { status: 400 });
@@ -11,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   const upstream = await fetch(`${GATEWAY}/api/auth/login`, {
     method: "POST",
-    headers: { ...STORE_HEADERS, "Content-Type": "application/json" },
+    headers: { ...STORE_HEADERS, ...ipHeader, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
     cache: "no-store",
   });

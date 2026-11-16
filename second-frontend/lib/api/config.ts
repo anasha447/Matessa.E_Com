@@ -8,7 +8,9 @@ const GATEWAY = (
 
 // Which store this storefront is. Every gateway call carries it as X-Tenant-ID; the backend
 // maps it to that store's own schema (products, users, admins, orders are all per store).
-export const STORE_ID = process.env.NEXT_PUBLIC_TENANT_ID ?? "adventure";
+// Deliberately NOT read from the environment: building both apps with the same value would
+// silently merge two stores. Each storefront is one store, fixed in its code.
+export const STORE_ID = "adventure" as const;
 export const STORE_HEADERS = { "X-Tenant-ID": STORE_ID } as const;
 
 export const API_BASE_URL = typeof window === "undefined" ? GATEWAY : "/api/bff";
