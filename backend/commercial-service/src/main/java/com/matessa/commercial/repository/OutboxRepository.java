@@ -7,5 +7,11 @@ import java.util.List;
 
 public interface OutboxRepository extends JpaRepository<OutboxEvent, Long> {
 
-    List<OutboxEvent> findTop50ByPublishedAtIsNullOrderByIdAsc();
+    /**
+     * Claims up to {@code limit} unpublished rows for this transaction. SKIP LOCKED: rows another
+     * replica is already publishing are skipped instead of waited on or published twice.
+     */
+    @org.springframework.data.jpa.repository.Query(value = "select * from outbox where published_at is null "
+            + "order by id limit :limit for update skip locked", nativeQuery = true)
+    List<OutboxEvent> claimUnpublished(@org.springframework.data.repository.query.Param("limit") int limit);
 }

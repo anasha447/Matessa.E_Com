@@ -9,6 +9,11 @@ import com.matessa.commercial.dto.response.ProductVariantResponse;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.annotation.CachingConfigurer;
+import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.cache.interceptor.SimpleCacheErrorHandler;
+import org.springframework.data.redis.cache.BatchStrategies;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -37,7 +42,7 @@ import java.util.Map;
  */
 @Configuration
 @EnableCaching
-public class CacheConfig {
+public class CacheConfig implements CachingConfigurer {
 
     /** Product read-model by slug (the PDP fetch). */
     public static final String PRODUCT = "product";
@@ -69,16 +74,62 @@ public class CacheConfig {
                         new Jackson2JsonRedisSerializer<>(objectMapper, categoryListType))
         );
 
-        return RedisCacheManager.builder(connectionFactory)
+        // SCAN, not KEYS, when an eviction clears a whole cache: KEYS blocks Redis for every
+        // client while it walks the keyspace. transactionAware: evictions inside a database
+        // transaction happen after it commits, so a concurrent read cannot re-cache the
+        // pre-commit value for a whole TTL.
+        return RedisCacheManager.builder(RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory, BatchStrategies.scan(500)))
                 .cacheDefaults(base.entryTtl(Duration.ofMinutes(5)))
                 .withInitialCacheConfigurations(perCache)
+                .transactionAware()
                 .build();
     }
 
-    /** Same fallback as the Hibernate tenant resolver, so cache and schema always agree. */
+    /**
+     * The cache is an optimisation: when Redis is down, reads fall through to Postgres and
+     * writes skip the cache instead of failing the request with a 500. A programming error
+     * (no store in context) is still thrown.
+     */
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new SimpleCacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException e, org.springframework.cache.Cache cache, Object key) {
+                tolerate(e, "get", cache);
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException e, org.springframework.cache.Cache cache, Object key, Object value) {
+                tolerate(e, "put", cache);
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException e, org.springframework.cache.Cache cache, Object key) {
+                tolerate(e, "evict", cache);
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException e, org.springframework.cache.Cache cache) {
+                tolerate(e, "clear", cache);
+            }
+        };
+    }
+
+    private static void tolerate(RuntimeException e, String op, org.springframework.cache.Cache cache) {
+        if (e instanceof IllegalStateException) {
+            throw e;
+        }
+        org.slf4j.LoggerFactory.getLogger(CacheConfig.class)
+                .warn("Cache {} on '{}' failed, serving without cache: {}", op, cache.getName(), e.toString());
+    }
+
+    /** Same rule as the Hibernate tenant resolver: no store in context is a bug, not a default. */
     private static String currentStore(TenantProperties tenants) {
         String store = TenantContext.getTenantId();
-        return store != null ? store : tenants.defaultTenant();
+        if (store == null || !tenants.isKnown(store)) {
+            throw new IllegalStateException("Cache access outside a store context");
+        }
+        return store;
     }
 
     private static RedisCacheConfiguration withValue(RedisCacheConfiguration cfg, Jackson2JsonRedisSerializer<?> ser) {

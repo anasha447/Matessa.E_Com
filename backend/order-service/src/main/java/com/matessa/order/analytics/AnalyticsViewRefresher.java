@@ -37,6 +37,9 @@ public class AnalyticsViewRefresher {
 
     @Scheduled(fixedDelayString = "${analytics.refresh-interval-ms:120000}",
             initialDelayString = "${analytics.refresh-initial-delay-ms:30000}")
+    // One replica refreshes at a time: REFRESH ... CONCURRENTLY is a full recompute, and N
+    // replicas each running it every interval only competed for the same lock.
+    @net.javacrumbs.shedlock.spring.annotation.SchedulerLock(name = "analytics-view-refresh", lockAtMostFor = "PT10M")
     public void refresh() {
         for (String store : tenants.tenants()) {
             for (String view : VIEWS) {

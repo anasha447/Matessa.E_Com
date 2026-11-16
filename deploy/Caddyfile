@@ -1,0 +1,46 @@
+# Caddy — the only thing on the VPS that faces the internet.
+#
+#   browser ──HTTPS──▶ Caddy ──▶ storefront (Next.js BFF) ──▶ api-gateway ──▶ services
+#
+# - Automatic HTTPS (Let's Encrypt) for both store domains; HTTP is redirected to HTTPS.
+# - Caddy REPLACES X-Forwarded-For / X-Real-IP with the address it actually saw, so a client
+#   cannot forge its IP. The storefront BFF forwards that single value to the gateway, which
+#   rate-limits per real client (ClientIpResolver trusts only the internal Docker network).
+# - Nothing else is published: the gateway, services, Postgres, Redis, Kafka and MinIO are
+#   reachable only on the internal Docker network.
+#
+# Domains come from .env (MATESSA_DOMAIN, ADVENTURE_DOMAIN); ACME_EMAIL gets expiry notices.
+
+{
+	email {$ACME_EMAIL}
+	# Admin API stays off the network.
+	admin off
+}
+
+(storefront) {
+	encode zstd gzip
+	header {
+		-Server
+		-X-Powered-By
+	}
+	request_body {
+		# Product image uploads are capped at 8 MB in commercial-service; leave headroom.
+		max_size 10MB
+	}
+}
+
+{$MATESSA_DOMAIN} {
+	import storefront
+	reverse_proxy frontend:3100 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+{$ADVENTURE_DOMAIN} {
+	import storefront
+	reverse_proxy second-frontend:3000 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+	}
+}

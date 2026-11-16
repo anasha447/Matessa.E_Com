@@ -9,6 +9,10 @@ spring:
       circuitbreaker:
         enabled: true       # wrap Feign calls in a Resilience4j circuit breaker
   datasource:
+    hikari:
+      # Per instance. Keep (replicas x pool) of all services under Postgres max_connections.
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5533/orders}   # matessa-db host port (5533), 'orders' database
     username: ${SPRING_DATASOURCE_USERNAME:matessa_order}
     password: ${SPRING_DATASOURCE_PASSWORD:change_me_strong_password}
@@ -88,3 +92,6 @@ resilience4j:
 app:
   tenancy:
     tenants: ${APP_TENANCY_TENANTS:matessa,adventure}
+
+# Service-to-service key for /internal/** (order-service -> commercial-service).
+app.internal.api-key: ${INTERNAL_API_KEY:}

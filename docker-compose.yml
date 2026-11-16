@@ -40,16 +40,19 @@ services:
 
   # ---- shared Postgres: ONE server, three isolated databases ----
   # Consolidated from three postgres containers to cut memory/CPU on a small host.
-  # `users` is created by the POSTGRES_* env below; `commercial` + `orders` (each with
-  # its own owning role) are created on first boot by backend/db-init/init-multi-db.sh.
+  # The POSTGRES_* superuser is used only by Postgres itself and the first-boot init script;
+  # backend/db-init/init-multi-db.sh then creates `users`, `commercial` and `orders`, each
+  # owned by its own NON-superuser role. A compromised service can reach only its own DB.
   # Still database-per-service: separate DBs + separate credentials, no cross-DB joins.
   matessa-db:
     image: postgres:16-alpine
     container_name: matessa-db
     environment:
-      POSTGRES_DB: users
-      POSTGRES_USER: ${USERS_DB_USER:?set USERS_DB_USER in .env}          # bootstrap superuser + owner of `users`
-      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD:?set USERS_DB_PASSWORD in .env}
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${PG_SUPERUSER:-postgres}                              # admin only — no service uses it
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:?set PG_SUPERUSER_PASSWORD in .env}
+      USERS_DB_USER: ${USERS_DB_USER:?set USERS_DB_USER in .env}            # consumed by the init script
+      USERS_DB_PASSWORD: ${USERS_DB_PASSWORD:?set USERS_DB_PASSWORD in .env}
       COMMERCIAL_DB_USER: ${COMMERCIAL_DB_USER:?set COMMERCIAL_DB_USER in .env}   # consumed by the init script
       COMMERCIAL_DB_PASSWORD: ${COMMERCIAL_DB_PASSWORD:?set COMMERCIAL_DB_PASSWORD in .env}
       ORDERS_DB_USER: ${ORDERS_DB_USER:?set ORDERS_DB_USER in .env}
@@ -62,7 +65,7 @@ services:
     networks:
       - matessa-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${USERS_DB_USER:?set USERS_DB_USER in .env} -d users"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_SUPERUSER:-postgres} -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,6 +78,7 @@ services:
     environment:
       SERVER_PORT: 8081
       SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/users   # shared server, `users` db
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       SPRING_DATASOURCE_USERNAME: ${USERS_DB_USER:?set USERS_DB_USER in .env}
       SPRING_DATASOURCE_PASSWORD: ${USERS_DB_PASSWORD:?set USERS_DB_PASSWORD in .env}
       APP_TENANCY_TENANTS: ${APP_TENANCY_TENANTS:-matessa,adventure}   # one schema per store in this DB
@@ -137,6 +141,9 @@ services:
       # Browser origins allowed to call the gateway. Both storefronts, comma-separated.
       # Override per environment; the code default covers local dev only.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3100,http://localhost:3000}
+      APP_TENANCY_TENANTS: ${APP_TENANCY_TENANTS:-matessa,adventure}   # gateway refuses any other store
+      # Only peers on this project's network may state the client IP (the storefront BFFs).
+      RATELIMIT_TRUSTED_PROXIES: 127.0.0.1/32,::1/128,172.28.0.0/16
       TRACING_SAMPLING: "0"                     # tracing off (Tempo removed)
       # -XX:TieredStopAtLevel=1 → C1-only JIT for a much faster cold start (dev priority).
       JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -XX:TieredStopAtLevel=1 -Xmx320m"
@@ -179,7 +186,9 @@ services:
       JWT_PUBLIC_KEY_PATH: file:/app/keys/jwt-public.pem   # validates only; public key
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis                         # Phase 2: catalog cache
-      APP_MEDIA_DIR: /app/media/products        # uploaded product images (WebP), persisted below
+      APP_MEDIA_DIR: /app/media                 # local image store root (dev); prod uses MinIO (APP_MEDIA_STORE=s3)
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in .env}   # order-service -> /internal/**
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       # Use the Parallel GC — the JDK 25 G1 collector has crashed (SIGSEGV in
       # G1ParScanThreadState) under load in this container; ParallelGC is stable here.
       JAVA_TOOL_OPTIONS: "-XX:+UseParallelGC -XX:TieredStopAtLevel=1 -Xmx400m"   # C1-only JIT = faster cold start; bounded heap: JVMs share a 4 GB VM; a RAM-% heap over-commits and the OOM killer strikes
@@ -238,6 +247,8 @@ services:
     environment:
       SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://matessa-db:5432/orders   # shared server, `orders` db
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in .env}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       SPRING_DATASOURCE_USERNAME: ${ORDERS_DB_USER:?set ORDERS_DB_USER in .env}
       SPRING_DATASOURCE_PASSWORD: ${ORDERS_DB_PASSWORD:?set ORDERS_DB_PASSWORD in .env}
       APP_TENANCY_TENANTS: ${APP_TENANCY_TENANTS:-matessa,adventure}   # one schema per store in this DB
@@ -355,7 +366,7 @@ services:
   # then open http://localhost:5050 and log in with PGADMIN_EMAIL / PGADMIN_PASSWORD from .env. When registering
   # the database inside pgAdmin, use the INTERNAL network address — NOT localhost:5533 —
   # because pgAdmin runs in a container on the same Docker network:
-  #     Host=matessa-db  Port=5432  User=$USERS_DB_USER  Password=$USERS_DB_PASSWORD   (values from your .env)
+  #     Host=matessa-db  Port=5432  User=$PG_SUPERUSER  Password=$PG_SUPERUSER_PASSWORD   (values from your .env)
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: matessa-pgadmin
@@ -386,3 +397,6 @@ volumes:
 networks:
   matessa-net:                # private network; only this project's containers join
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16   # fixed, so the gateway can trust exactly this range (see api-gateway)

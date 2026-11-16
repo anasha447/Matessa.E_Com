@@ -14,7 +14,7 @@ public interface ImageStorageService {
      * Decode the uploaded image, re-encode it as WebP, and store it.
      *
      * @param file the multipart upload (raster image; PNG/JPEG/WebP/…)
-     * @return the public URL path of the stored WebP, e.g. {@code /media/products/ab12cd.webp}
+     * @return the public URL path of the stored WebP, e.g. {@code /media/matessa/ab12…cd.webp}
      */
     String storeAsWebp(MultipartFile file);
 }

@@ -2,6 +2,8 @@ package com.matessa.commercial.service.impl;
 
 import com.matessa.commercial.exception.BadRequestException;
 import com.matessa.commercial.service.ImageStorageService;
+import com.matessa.commercial.storage.ObjectStore;
+import com.matessa.commercial.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,36 +13,42 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageReader;
 import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.UUID;
 
 /**
- * Converts any uploaded raster image to WebP and writes it to the configured media
- * directory. WebP is produced via the {@code webp-imageio} ImageIO plugin (bundled
- * native libs). The stored file is served statically at {@code /media/**} (see
- * {@code WebConfig}); the returned path goes into {@code ProductImage.url}.
+ * Converts any uploaded raster image to WebP and stores it in the shared {@link ObjectStore}
+ * (S3/MinIO in production, a directory in development). WebP is produced via the
+ * {@code webp-imageio} ImageIO plugin (bundled native libs).
+ *
+ * <p>The object key is {@code <store>/<32-hex>.webp}, so each store's images live under its
+ * own prefix; the returned URL ({@code /media/<store>/<32-hex>.webp}, served by
+ * {@code MediaController}) goes into {@code ProductImage.url}.
+ *
+ * <p>Image dimensions are read from the header <em>before</em> decoding, and anything over
+ * {@value #MAX_PIXELS_PER_SIDE}px on a side is refused: a tiny compressed file can declare an
+ * enormous canvas (a decompression bomb) and exhaust the heap during decode.
  */
 @Service
 public class WebpImageStorageService implements ImageStorageService {
 
     private static final Logger log = LoggerFactory.getLogger(WebpImageStorageService.class);
     private static final long MAX_BYTES = 8L * 1024 * 1024;   // 8 MB upload cap
-    private static final String URL_PREFIX = "/media/products/";
+    static final int MAX_PIXELS_PER_SIDE = 4096;
 
-    private final Path storageDir;
+    private final ObjectStore objectStore;
     private final float quality;
 
-    public WebpImageStorageService(
-            @Value("${app.media.dir:/app/media/products}") String storageDir,
-            @Value("${app.media.webp-quality:0.82}") float quality) {
-        this.storageDir = Path.of(storageDir);
+    public WebpImageStorageService(ObjectStore objectStore,
+                                   @Value("${app.media.webp-quality:0.82}") float quality) {
+        this.objectStore = objectStore;
         this.quality = quality;
     }
 
@@ -53,18 +61,49 @@ public class WebpImageStorageService implements ImageStorageService {
             throw new BadRequestException("Image exceeds the 8 MB upload limit.");
         }
 
+        String store = TenantContext.getTenantId();
+        if (store == null) {
+            throw new IllegalStateException("Image upload outside a store context");
+        }
+        checkDimensions(file);
         BufferedImage image = decode(file);
         byte[] webp = encodeWebp(image);
 
-        String filename = UUID.randomUUID().toString().replace("-", "") + ".webp";
+        String key = store + "/" + UUID.randomUUID().toString().replace("-", "") + ".webp";
         try {
-            Files.createDirectories(storageDir);
-            Files.write(storageDir.resolve(filename), webp);
-        } catch (IOException e) {
-            log.error("Failed to write WebP image to {}", storageDir, e);
+            objectStore.put(key, webp, "image/webp");
+        } catch (RuntimeException e) {
+            log.error("Failed to store WebP image {}", key, e);
             throw new BadRequestException("Could not store the image. Please try again.");
         }
-        return URL_PREFIX + filename;
+        return "/media/" + key;
+    }
+
+    /** Reads width/height from the image header without decoding the pixels. */
+    private void checkDimensions(MultipartFile file) {
+        try (InputStream in = file.getInputStream(); ImageInputStream iis = ImageIO.createImageInputStream(in)) {
+            if (iis == null) {
+                throw new BadRequestException("Unsupported or corrupt image file. Upload a PNG, JPEG, or WebP.");
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                throw new BadRequestException("Unsupported or corrupt image file. Upload a PNG, JPEG, or WebP.");
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(iis, true, true);
+                int w = reader.getWidth(0);
+                int h = reader.getHeight(0);
+                if (w > MAX_PIXELS_PER_SIDE || h > MAX_PIXELS_PER_SIDE) {
+                    throw new BadRequestException("Image is " + w + "×" + h + " px; the limit is "
+                            + MAX_PIXELS_PER_SIDE + " px on each side.");
+                }
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException e) {
+            throw new BadRequestException("Could not read the uploaded image.");
+        }
     }
 
     private BufferedImage decode(MultipartFile file) {
