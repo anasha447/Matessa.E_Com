@@ -134,6 +134,14 @@ All money display goes through `formatMoney` (`frontend/lib/utils/money.ts`): **
 
 Framer-motion (typed, client components only): fade+rise entrances with stagger; card spring hovers; image zoom 500ms; marquee 25s pause-on-hover; parallax quote banners; calm logo glow. Respect `prefers-reduced-motion` (disable marquee/parallax, keep opacity fades). Keep client boundaries small — motion wrappers, not whole pages.
 
+**Landing hero pouch (diverges from `Matessa Landing v4.dc.html`).** The pouch stage in `components/home/HeroFlavorCycler.tsx` is no longer the flat photo cycler from the design:
+
+- **First paint / fallback:** a two-sided CSS pouch built from the flat pack art in `public/brand/pack/` (front + back). Tap flips it; the flavor's ingredient cut-outs float around it.
+- **3D (`components/home/hero/PouchScene.tsx`, three.js + @react-three/fiber, lazy-loaded, never server-rendered):** a real pouch that sways, drags round, flips on tap, and spins a full turn to change flavor (art swaps edge-on). Ingredient cut-outs orbit it on two tilted rings.
+- **3D is skipped** under `prefers-reduced-motion`, data-saver, fewer than 4 CPU cores, under 3 GB device memory, or no WebGL2. Reduced motion also gets no autoplay and an instant flip.
+- **Controls under the stage (both modes):** blend tabs and ingredient chips (one swipeable row on phones, wrapped on wider screens). Selecting a chip or a floating cut-out highlights that ingredient and shows a one-line taste note — no percentages, no health claims.
+- **Data:** `components/home/hero/flavors.ts`. A flavor appears in the hero only when it has both `front` and `back` art; Raw Mate is waiting on its pack art.
+
 ## 11. Agent setup checklist
 
 - [ ] Tokens in `frontend/app/globals.css` mirror §2 exactly.

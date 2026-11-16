@@ -1,56 +1,40 @@
 "use client";
 
-// Landing hero — faithful port of design-source/project/Matessa Landing v4.dc.html §Hero.
-// The color-field circle is a full-bleed element anchored to the RIGHT viewport edge so
-// it reads as a half-circle reaching the screen centre; the section clips horizontal
-// overflow so the full circle can never be revealed by scrolling right. Autoplay 4s
-// (+1.4s first), pauses on hover/touch/hidden tab; swipe or the dots switch flavors.
+// Landing hero. Layout follows design-source/project/Matessa Landing v4.dc.html §Hero (H1
+// left, pouch on a color-field circle right); the pouch stage itself now diverges from it:
+//
+//  - First paint / fallback: a two-sided CSS pouch built from the flat pack art. Tap to flip
+//    it and read the back; the flavor's ingredient cut-outs float around it.
+//  - Capable devices: a real 3D pouch (hero/PouchScene) fades in over it once its textures
+//    load — drag to turn, tap to flip, ingredients orbit it. Skipped under reduced motion,
+//    data-saver, low-power devices or when WebGL is missing.
+//  - Both modes share the blend tabs and the ingredient chips below the stage; a chip (or a
+//    floating cut-out in 3D) highlights that ingredient and shows its taste note.
+//
+// See frontend/animation.hero.md for the full plan and DESIGN-SYSTEM.md §10 for the rules.
 
-import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { HERO_FLAVORS, HERO_SPRITES, PACK_ASPECT } from "./hero/flavors";
 
-interface Flavor {
-  deepText: string;
-  circle: string;
-  pouch: string;
-  pouchAlt: string;
-}
+const PouchScene = dynamic(() => import("./hero/PouchScene"), { ssr: false });
 
-const FLAVORS: Flavor[] = [
-  {
-    deepText: "#C2500F",
-    circle: "radial-gradient(circle at 32% 26%, #F8DCC2 0%, #F2BF92 100%)",
-    pouch: "/brand/pouch-masala.webp",
-    pouchAlt: "Matessa Masala yerba mate pouch",
-  },
-  {
-    deepText: "#A58114",
-    circle: "radial-gradient(circle at 32% 26%, #FAEBBB 0%, #F4D87D 100%)",
-    pouch: "/brand/pouch-lemon-ginger.webp",
-    pouchAlt: "Matessa Lemon and Ginger yerba mate pouch",
-  },
-  {
-    deepText: "#8F7A33",
-    circle: "radial-gradient(circle at 32% 26%, #F1E9D0 0%, #E4D5A8 100%)",
-    pouch: "/brand/pouch-raw.webp",
-    pouchAlt: "Matessa Raw Mate pure loose leaf pouch",
-  },
+const AUTOPLAY_MS = 7000;
+/** After the visitor touches the pouch, leave them alone for this long. */
+const QUIET_MS = 10000;
+const INK = "#2F3B28";
+const CREAM = "#FDF5E6";
+
+// Where the cut-outs sit around the CSS pouch (order = sprite order within a flavor).
+const FLAT_SLOTS: { side: "left" | "right"; x: string; y: string; scale: number; rotate: number; float: string }[] = [
+  { side: "left", x: "3%", y: "12%", scale: 1, rotate: -8, float: "6.4s ease-in-out -1.2s" },
+  { side: "right", x: "4%", y: "10%", scale: 0.9, rotate: 10, float: "5.6s ease-in-out 0s" },
+  { side: "left", x: "6%", y: "62%", scale: 0.72, rotate: 14, float: "7.2s ease-in-out -2.4s" },
+  { side: "right", x: "7%", y: "60%", scale: 0.76, rotate: -12, float: "5.9s ease-in-out -1.8s" },
+  { side: "left", x: "0%", y: "38%", scale: 0.6, rotate: 6, float: "6.8s ease-in-out -1.6s" },
+  { side: "right", x: "0%", y: "36%", scale: 0.62, rotate: -6, float: "5.4s ease-in-out -0.6s" },
+  { side: "right", x: "20%", y: "2%", scale: 0.55, rotate: 18, float: "6.1s ease-in-out -3s" },
 ];
-
-// Behind-the-pouch ingredients (one per flavor). Mobile positions pull them to the very
-// edge + shrink them so they frame the centred pouch instead of overlapping it.
-const ING_BEHIND = [
-  { src: "/brand/ing-cinnamon-anise.webp", alt: "Cinnamon sticks and star anise", left: "5%", bottom: "10%", width: "clamp(110px, 12vw, 170px)", rotate: "-8deg", anim: "mtsa-float 6.4s ease-in-out -1.2s infinite" },
-  { src: "/brand/ing-ginger1.png", alt: "Ginger root", left: "5%", bottom: "8%", width: "clamp(96px, 11vw, 152px)", rotate: "-6deg", anim: "mtsa-float 7.2s ease-in-out -2.4s infinite" },
-  { src: "/brand/ing-mate-leaf1.webp", alt: "Yerba mate leaves", left: "7%", bottom: "6%", width: "clamp(96px, 11vw, 150px)", rotate: "-10deg", anim: "mtsa-float 6.8s ease-in-out -1.6s infinite" },
-];
-
-const ING_FRONT = [
-  { src: "/brand/ing-cardamom.png", alt: "Cardamom pods", right: "15%", bottom: "14%", width: "clamp(56px, 6.5vw, 90px)", rotate: "20deg", anim: "mtsa-float 5.9s ease-in-out -1.8s infinite" },
-  { src: "/brand/ing-lemon1.png", alt: "Lemon", right: "7%", bottom: "14%", width: "clamp(76px, 9vw, 126px)", rotate: "8deg", anim: "mtsa-float 5.6s ease-in-out infinite" },
-  { src: "/brand/ing-mate-leaf2.webp", alt: "Yerba mate leaf branch", right: "9%", bottom: "5%", width: "clamp(88px, 10vw, 140px)", rotate: "12deg", anim: "mtsa-float 5.4s ease-in-out infinite" },
-];
-
-const INTERVAL_S = 4;
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
@@ -64,87 +48,123 @@ function useIsMobile() {
   return mobile;
 }
 
+/** Can this device comfortably run the WebGL scene? */
+function canRun3D() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+  if (nav.connection?.saveData) return false;
+  if ((nav.hardwareConcurrency ?? 4) < 4) return false;
+  if ((nav.deviceMemory ?? 4) < 3) return false;
+  try {
+    return Boolean(document.createElement("canvas").getContext("webgl2"));
+  } catch {
+    return false;
+  }
+}
+
+class SceneBoundary extends Component<{ onError: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onError();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 export function HeroFlavorCycler() {
   const [active, setActive] = useState(0);
-  const [prev, setPrev] = useState(-1);
   const [entered, setEntered] = useState(false);
+  const [mode, setMode] = useState<"flat" | "3d">("flat");
+  const [sceneReady, setSceneReady] = useState(false);
+  const [flatGone, setFlatGone] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [flipped, setFlipped] = useState(false);
+  const [wantBack, setWantBack] = useState(false);
+  const [turns, setTurns] = useState(0);
   const isMobile = useIsMobile();
+
   const hover = useRef(false);
-  const touch = useRef<{ x: number; y: number } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const busy = useRef(false);
+  const lastTouch = useRef(0);
+  const reduced = useRef(false);
+
+  const flavor = HERO_FLAVORS[active];
+  const show3D = mode === "3d" && sceneReady;
 
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setEntered(true));
+    reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const raf = requestAnimationFrame(() => {
+      setEntered(true);
+      if (canRun3D()) setMode("3d");
+    });
     return () => cancelAnimationFrame(raf);
   }, []);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const arm = (first: boolean) => {
-      timer.current = setTimeout(() => {
-        if (!document.hidden && !hover.current) {
-          setActive((a) => {
-            setPrev(a);
-            return (a + 1) % 3;
-          });
-        }
-        arm(false);
-      }, (first ? INTERVAL_S + 1.4 : INTERVAL_S) * 1000);
-    };
-    arm(true);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, []);
+    busy.current = selected !== null || flipped;
+  }, [selected, flipped]);
 
-  const go = (i: number) =>
+  // Once the 3D pouch has faded in, drop the CSS one so its animations stop running.
+  useEffect(() => {
+    if (!show3D) return;
+    const id = setTimeout(() => setFlatGone(true), 900);
+    return () => clearTimeout(id);
+  }, [show3D]);
+
+  const go = useCallback((i: number) => {
     setActive((a) => {
       if (i === a) return a;
-      setPrev(a);
+      setSelected(null);
+      setFlipped(false);
+      if (!reduced.current) setTurns((t) => t + 1);
       return i;
     });
+  }, []);
 
-  const pouchStyle = (i: number): React.CSSProperties => {
-    const base: React.CSSProperties = {
-      position: "absolute",
-      inset: 0,
-      display: "flex",
-      alignItems: "flex-end",
-      justifyContent: "center",
-      transformOrigin: "50% 230%",
-      willChange: "transform, opacity",
-    };
-    if (i === active) {
-      return {
-        ...base,
-        transform: entered ? "rotate(0deg)" : "rotate(-58deg)",
-        opacity: entered ? 1 : 0,
-        transition: "transform 1.25s cubic-bezier(0.22, 0.68, 0.14, 1), opacity 0.5s ease 0.12s",
-        zIndex: 3,
-      };
-    }
-    if (i === prev) {
-      return {
-        ...base,
-        transform: "rotate(58deg)",
-        opacity: 0,
-        transition: "transform 1.15s cubic-bezier(0.5, 0.04, 0.62, 1), opacity 0.55s ease 0.32s",
-        zIndex: 2,
-      };
-    }
-    return { ...base, transform: "rotate(-58deg)", opacity: 0, transition: "none", zIndex: 1 };
+  // Autoplay — never under reduced motion, and it stays out of the way while the visitor is
+  // hovering, reading the back, inspecting an ingredient, or has just turned the pouch.
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (HERO_FLAVORS.length < 2) return;
+    const id = setInterval(() => {
+      if (document.hidden || hover.current || busy.current) return;
+      if (Date.now() - lastTouch.current < QUIET_MS) return;
+      setActive((a) => (a + 1) % HERO_FLAVORS.length);
+      setTurns((t) => t + 1);
+    }, AUTOPLAY_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const touched = useCallback(() => {
+    lastTouch.current = Date.now();
+  }, []);
+  const onSceneReady = useCallback(() => setSceneReady(true), []);
+  const onSceneError = useCallback(() => {
+    setMode("flat");
+    setSceneReady(false);
+    setFlatGone(false);
+  }, []);
+  const select = useCallback(
+    (name: string | null) => {
+      touched();
+      setSelected(name);
+    },
+    [touched],
+  );
+
+  const flip = () => {
+    touched();
+    setWantBack(true);
+    setFlipped((f) => !f);
   };
 
-  const ingStyle = (flavor: number, delay: number): React.CSSProperties => {
-    const on = active === flavor && entered;
-    return {
-      opacity: on ? 1 : 0,
-      transform: on ? "translateY(0px) scale(1)" : "translateY(46px) scale(0.72)",
-      transition: on
-        ? `opacity 0.7s ease ${delay}s, transform 1.05s cubic-bezier(0.22, 0.68, 0.2, 1) ${delay}s`
-        : "opacity 0.4s ease, transform 0.5s ease",
-    };
-  };
+  const gutter = "clamp(20px, 4vw, 48px)";
+  const selectedIngredient = flavor.ingredients.find((ing) => ing.name === selected);
+  const flavorSprites = (i: number) => HERO_SPRITES.filter((s) => s.flavor === i);
 
   return (
     <section
@@ -170,7 +190,7 @@ export function HeroFlavorCycler() {
             width: "min(1180px, 78vw)",
             aspectRatio: "1",
             borderRadius: "50%",
-            background: FLAVORS[active].circle,
+            background: flavor.circle,
             transition: "background 1.1s ease",
             zIndex: 0,
           }}
@@ -188,217 +208,368 @@ export function HeroFlavorCycler() {
           alignItems: "center",
           gap: "clamp(12px, 3vw, 40px)",
           padding: isMobile
-            ? "clamp(84px, 12vh, 120px) clamp(20px, 4vw, 48px) 0"
-            : "clamp(96px, 14vh, 140px) clamp(20px, 4vw, 48px) clamp(36px, 6vh, 70px)",
+            ? `clamp(84px, 12vh, 120px) ${gutter} 0`
+            : `clamp(96px, 14vh, 140px) ${gutter} clamp(28px, 5vh, 56px)`,
         }}
       >
         {/* Left: copy (design shows only the H1) */}
-        <div style={{ flex: "1 1 430px", minWidth: 300, position: "relative", zIndex: 5 }}>
+        <div style={{ flex: "1 1 430px", minWidth: 280, position: "relative", zIndex: 5 }}>
           <h1
             className="font-heading"
             style={{
               margin: 0,
               fontWeight: 700,
-              fontSize: "clamp(42px, 5.2vw, 74px)",
+              fontSize: "clamp(40px, 5.2vw, 74px)",
               lineHeight: 1.06,
               letterSpacing: "-0.01em",
-              color: "#2F3B28",
+              color: INK,
               textWrap: "balance",
             }}
           >
             The Ritual of{" "}
-            <em style={{ fontStyle: "italic", color: FLAVORS[active].deepText, transition: "color 0.9s ease" }}>
+            <em style={{ fontStyle: "italic", color: flavor.deepText, transition: "color 0.9s ease" }}>
               Natural Energy
             </em>
           </h1>
         </div>
 
-        {/* Right: animated pouch stage */}
+        {/* Right: pouch stage + controls */}
         <div
           onMouseEnter={() => (hover.current = true)}
           onMouseLeave={() => (hover.current = false)}
-          onTouchStart={(e) => {
-            touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-          }}
-          onTouchEnd={(e) => {
-            if (!touch.current) return;
-            const dx = e.changedTouches[0].clientX - touch.current.x;
-            const dy = e.changedTouches[0].clientY - touch.current.y;
-            touch.current = null;
-            if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-              go(dx < 0 ? (active + 1) % 3 : (active + 2) % 3);
-            }
-          }}
           style={{
             flex: "1 1 460px",
-            minWidth: 280,
+            minWidth: 0,
             position: "relative",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: isMobile ? 470 : "clamp(440px, 52vw, 660px)",
-            // Mobile: bleed the stage to the viewport edges (cancel the wrapper's side
-            // padding) and clip the circle at those edges + the marquee below, so the
-            // circle fills the width and reaches the bar with no cream gutters.
-            margin: isMobile ? "0 calc(-1 * clamp(20px, 4vw, 48px))" : undefined,
+            // Mobile: bleed to the viewport edges (cancel the wrapper's side padding) and clip
+            // the circle there + at the marquee below, so it fills the width with no gutters.
+            margin: isMobile ? `0 calc(-1 * ${gutter})` : undefined,
             overflow: isMobile ? "hidden" : "visible",
+            paddingBottom: isMobile ? 26 : 0,
           }}
         >
-          {/* mobile color-field circle — top edge just below the pouch head; the width is
-              viewport-relative so it always bleeds off both sides (phone and tablet) and
-              off the bottom to the marquee. */}
           {isMobile && (
             <div
               aria-hidden="true"
               style={{
                 position: "absolute",
                 left: "50%",
-                top: "clamp(88px, 22%, 150px)",
+                top: "clamp(70px, 18vw, 130px)",
                 transform: "translateX(-50%)",
-                width: "142vw",
+                width: "max(142vw, 760px)",
                 aspectRatio: "1",
                 borderRadius: "50%",
-                background: FLAVORS[active].circle,
+                background: flavor.circle,
                 transition: "background 1.1s ease",
                 zIndex: 0,
               }}
             />
           )}
 
-          {/* ground shadow */}
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              left: "50%",
-              bottom: isMobile ? "12%" : "6%",
-              transform: "translateX(-50%)",
-              width: "52%",
-              height: 32,
-              background: "radial-gradient(ellipse at center, rgba(24,32,16,0.26), transparent 68%)",
-              filter: "blur(7px)",
-            }}
-          />
-
-          {/* ingredients — behind the pouch */}
-          {ING_BEHIND.map((ing, i) => (
-            <div
-              key={ing.src}
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                // Mobile/tablet: anchor to the packet's left edge (packet is centred, so
-                // % from the viewport drifts). right = 50% + packet-half-width + small gap.
-                left: isMobile ? "auto" : ing.left,
-                right: isMobile ? "calc(50% + 118px)" : "auto",
-                bottom: isMobile ? "17%" : ing.bottom,
-                width: isMobile ? "clamp(62px, 17vw, 92px)" : ing.width,
-                pointerEvents: "none",
-                ...ingStyle(i, 0.35),
-              }}
-            >
-              <div style={{ animation: ing.anim }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={ing.src}
-                  alt={ing.alt}
-                  draggable={false}
-                  style={{ width: "100%", transform: `rotate(${ing.rotate})`, filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.18))" }}
-                />
-              </div>
-            </div>
-          ))}
-
-          {/* floating pouch stack — pushed up a bit on mobile so it crosses the circle */}
+          {/* ── Stage ─────────────────────────────────────────────────────────── */}
           <div
             style={{
               position: "relative",
-              height: "clamp(360px, 44vw, 580px)",
-              aspectRatio: "0.62",
-              animation: "mtsa-float 6.5s ease-in-out infinite",
-              marginBottom: isMobile ? 44 : 0,
-              zIndex: 2,
+              height: isMobile ? "clamp(380px, 104vw, 540px)" : "clamp(400px, 46vw, 600px)",
+              zIndex: 1,
             }}
           >
-            {FLAVORS.map((f, i) => (
-              <div key={f.pouch} style={pouchStyle(i)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={f.pouch}
-                  alt={f.pouchAlt}
-                  draggable={false}
-                  style={{ height: "100%", width: "auto", userSelect: "none", filter: "drop-shadow(0 24px 34px rgba(24,32,16,0.22))" }}
-                />
-              </div>
-            ))}
-          </div>
+            <p className="sr-only">Matessa {flavor.name} yerba mate pouch</p>
 
-          {/* ingredients — in front of the pouch */}
-          {ING_FRONT.map((ing, i) => (
+            {/* ground shadow */}
             <div
-              key={ing.src}
               aria-hidden="true"
               style={{
                 position: "absolute",
-                // Mobile/tablet: anchor to the packet's right edge (left = 50% + half + gap).
-                left: isMobile ? "calc(50% + 118px)" : "auto",
-                right: isMobile ? "auto" : ing.right,
-                bottom: isMobile ? "20%" : ing.bottom,
-                width: isMobile ? "clamp(50px, 13vw, 78px)" : ing.width,
-                pointerEvents: "none",
-                zIndex: 3,
-                ...ingStyle(i, 0.55),
+                left: "50%",
+                bottom: "7%",
+                transform: "translateX(-50%)",
+                width: "min(46%, 300px)",
+                height: 30,
+                background: "radial-gradient(ellipse at center, rgba(24,32,16,0.26), transparent 68%)",
+                filter: "blur(7px)",
+              }}
+            />
+
+            {/* CSS pouch + floating cut-outs: first paint, and the fallback when 3D is off */}
+            {!flatGone && (
+              <div
+                aria-hidden={show3D}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  opacity: show3D ? 0 : 1,
+                  pointerEvents: show3D ? "none" : "auto",
+                  transition: "opacity 0.7s ease",
+                }}
+              >
+                {HERO_FLAVORS.map((_, fi) =>
+                  flavorSprites(fi).map((s, k) => {
+                    const slot = FLAT_SLOTS[k % FLAT_SLOTS.length];
+                    const on = fi === active && entered;
+                    const lit = selected === s.ingredient;
+                    return (
+                      <div
+                        key={`${fi}-${s.src}`}
+                        aria-hidden="true"
+                        style={{
+                          position: "absolute",
+                          [slot.side]: slot.x,
+                          bottom: slot.y,
+                          width: `calc(clamp(58px, 10vw, 128px) * ${slot.scale})`,
+                          pointerEvents: "none",
+                          zIndex: k < 2 ? 3 : 1,
+                          opacity: on ? (selected && !lit ? 0.4 : 1) : 0,
+                          transform: on ? `translateY(0) scale(${lit ? 1.22 : 1})` : "translateY(40px) scale(0.72)",
+                          transition: on
+                            ? `opacity 0.6s ease ${0.25 + k * 0.06}s, transform 0.9s cubic-bezier(0.22, 0.68, 0.2, 1) ${0.25 + k * 0.06}s`
+                            : "opacity 0.35s ease, transform 0.45s ease",
+                        }}
+                      >
+                        <div style={{ animation: `mtsa-float ${slot.float} infinite` }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={s.src}
+                            alt=""
+                            draggable={false}
+                            loading={fi === 0 ? "eager" : "lazy"}
+                            style={{
+                              width: "100%",
+                              transform: `rotate(${slot.rotate}deg)`,
+                              filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.18))",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  }),
+                )}
+
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: "50%",
+                    height: "74%",
+                    aspectRatio: String(PACK_ASPECT),
+                    transform: `translate(-50%, -50%) translateY(${entered ? 0 : 28}px)`,
+                    opacity: entered ? 1 : 0,
+                    transition: "transform 0.9s cubic-bezier(0.22, 0.68, 0.14, 1), opacity 0.6s ease",
+                    perspective: 1400,
+                    zIndex: 2,
+                  }}
+                >
+                  <div style={{ width: "100%", height: "100%", animation: "mtsa-float 6.5s ease-in-out infinite" }}>
+                    <button
+                      type="button"
+                      onClick={flip}
+                      onPointerEnter={() => setWantBack(true)}
+                      onFocus={() => setWantBack(true)}
+                      tabIndex={show3D ? -1 : 0}
+                      aria-pressed={flipped}
+                      aria-label={`Flip the ${flavor.name} pouch to see the ${flipped ? "front" : "back"}`}
+                      className="mtsa-flip"
+                      style={{
+                        display: "block",
+                        position: "relative",
+                        width: "100%",
+                        height: "100%",
+                        padding: 0,
+                        border: "none",
+                        background: "none",
+                        cursor: "pointer",
+                        borderRadius: "4.5% / 2.7%",
+                        transformStyle: "preserve-3d",
+                        transform: `rotateY(${turns * 360 + (flipped ? 180 : 0)}deg)`,
+                        transition: "transform 1.1s cubic-bezier(0.3, 0.1, 0.2, 1)",
+                      }}
+                    >
+                      {(["front", "back"] as const).map((face) => (
+                        <span
+                          key={face}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            backfaceVisibility: "hidden",
+                            transform: face === "back" ? "rotateY(180deg)" : undefined,
+                            filter: "drop-shadow(0 22px 30px rgba(24,32,16,0.22))",
+                          }}
+                        >
+                          {HERO_FLAVORS.map((f, fi) =>
+                            face === "back" && !wantBack ? null : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={f.slug}
+                                src={f[face]}
+                                alt=""
+                                draggable={false}
+                                fetchPriority={face === "front" && fi === 0 ? "high" : undefined}
+                                style={{
+                                  position: "absolute",
+                                  inset: 0,
+                                  width: "100%",
+                                  height: "100%",
+                                  userSelect: "none",
+                                  opacity: fi === active ? 1 : 0,
+                                  transition: "opacity 0.25s ease 0.3s",
+                                }}
+                              />
+                            ),
+                          )}
+                          {/* soft pouch shading: darker seams at the sides, a highlight off-centre */}
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              borderRadius: "4.5% / 2.7%",
+                              background:
+                                "linear-gradient(90deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0) 14%, rgba(255,255,255,0.13) 36%, rgba(255,255,255,0) 58%, rgba(0,0,0,0.14) 100%), linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0) 5%, rgba(0,0,0,0) 90%, rgba(0,0,0,0.14) 100%)",
+                            }}
+                          />
+                        </span>
+                      ))}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3D pouch + orbiting ingredients */}
+            {mode === "3d" && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: isMobile ? 0 : "0 -6%",
+                  opacity: show3D ? 1 : 0,
+                  pointerEvents: show3D ? "auto" : "none",
+                  transition: "opacity 0.7s ease",
+                  zIndex: 4,
+                }}
+              >
+                <SceneBoundary onError={onSceneError}>
+                  <PouchScene
+                    active={active}
+                    selected={selected}
+                    onSelect={select}
+                    onReady={onSceneReady}
+                    onInteract={touched}
+                  />
+                </SceneBoundary>
+              </div>
+            )}
+          </div>
+
+          {/* ── Controls: blend tabs, ingredient chips, taste note ─────────────── */}
+          <div style={{ position: "relative", zIndex: 6, display: "grid", gap: 12, justifyItems: "center" }}>
+            <div role="tablist" aria-label="Choose a blend" style={{ display: "flex", gap: 8 }}>
+              {HERO_FLAVORS.map((f, i) => {
+                const on = i === active;
+                return (
+                  <button
+                    key={f.slug}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => {
+                      touched();
+                      go(i);
+                    }}
+                    className="font-body"
+                    style={{
+                      minHeight: 40,
+                      padding: "0 18px",
+                      borderRadius: 999,
+                      border: `1.5px solid ${on ? INK : "rgba(47,59,40,0.35)"}`,
+                      background: on ? INK : "rgba(255,255,255,0.35)",
+                      color: on ? CREAM : INK,
+                      fontSize: 14,
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      cursor: "pointer",
+                      transition: "background 0.3s ease, color 0.3s ease, border-color 0.3s ease",
+                    }}
+                  >
+                    {f.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            <ul
+              aria-label={`What is in ${flavor.name}`}
+              style={{
+                listStyle: "none",
+                margin: 0,
+                display: "flex",
+                gap: 8,
+                maxWidth: "100%",
+                // Phones: one swipeable row. Wider: wrap and centre.
+                flexWrap: isMobile ? "nowrap" : "wrap",
+                justifyContent: isMobile ? "flex-start" : "center",
+                overflowX: isMobile ? "auto" : "visible",
+                padding: isMobile ? `2px ${gutter}` : "2px 0",
+                scrollbarWidth: "none",
+                WebkitOverflowScrolling: "touch",
               }}
             >
-              <div style={{ animation: ing.anim }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={ing.src}
-                  alt={ing.alt}
-                  draggable={false}
-                  style={{ width: "100%", transform: `rotate(${ing.rotate})`, filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.2))" }}
-                />
-              </div>
-            </div>
-          ))}
+              {flavor.ingredients.map((ing) => {
+                const on = ing.name === selected;
+                return (
+                  <li key={ing.name} style={{ flex: "0 0 auto" }}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => select(on ? null : ing.name)}
+                      className="font-body"
+                      style={{
+                        minHeight: 36,
+                        padding: "0 14px",
+                        borderRadius: 999,
+                        border: `1px solid ${on ? flavor.deepText : "rgba(47,59,40,0.22)"}`,
+                        background: on ? flavor.deepText : "rgba(255,255,255,0.6)",
+                        color: on ? "#FFFFFF" : INK,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                        cursor: "pointer",
+                        transition: "background 0.25s ease, color 0.25s ease, border-color 0.25s ease",
+                      }}
+                    >
+                      {ing.name}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
 
-          {/* flavor dots — desktop only (mobile switches by swipe) */}
-          {!isMobile && (
-          <div
-            role="tablist"
-            aria-label="Choose a blend"
-            style={{
-              position: "absolute",
-              bottom: "8px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              display: "flex",
-              gap: 8,
-              zIndex: 6,
-            }}
-          >
-            {FLAVORS.map((f, i) => (
-              <button
-                key={f.pouch}
-                type="button"
-                role="tab"
-                aria-selected={i === active}
-                aria-label={f.pouchAlt}
-                onClick={() => go(i)}
-                style={{
-                  width: i === active ? 26 : 9,
-                  height: 9,
-                  padding: 0,
-                  border: "none",
-                  borderRadius: 999,
-                  cursor: "pointer",
-                  background: i === active ? "#2F3B28" : "rgba(47,59,40,0.28)",
-                  transition: "all 0.3s ease",
-                }}
-              />
-            ))}
+            <p
+              aria-live="polite"
+              className="font-body"
+              style={{
+                margin: 0,
+                minHeight: "2.9em",
+                maxWidth: "36ch",
+                padding: `0 ${isMobile ? gutter : "0px"}`,
+                textAlign: "center",
+                fontSize: 14,
+                lineHeight: 1.45,
+                color: INK,
+              }}
+            >
+              {selectedIngredient ? (
+                <>
+                  <strong>{selectedIngredient.name}.</strong> {selectedIngredient.benefit}
+                </>
+              ) : (
+                <span style={{ opacity: 0.72 }}>
+                  {show3D
+                    ? "Drag the pouch to turn it. Pick an ingredient to see what it brings."
+                    : "Tap the pouch to flip it. Pick an ingredient to see what it brings."}
+                </span>
+              )}
+            </p>
           </div>
-          )}
         </div>
       </div>
     </section>

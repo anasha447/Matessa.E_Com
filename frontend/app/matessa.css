@@ -229,6 +229,10 @@
   [style*="mtsa-marquee-ltr"] {
     animation: none !important;
   }
+  /* Hero CSS pouch: show the other face at once instead of turning. */
+  .mtsa-flip {
+    transition: none !important;
+  }
 }
 
 /* ---- Who Drinks Mate dome gallery (verbatim from Matessa Landing v4.dc.html) ---- */
