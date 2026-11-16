@@ -10,7 +10,7 @@
 4. **Soft deletes, never hard deletes** on anything another service may reference (products, variants, users). Set `active = false`; never `DELETE`. This keeps historical orders pointing at rows that still exist.
 5. **Money is `BigDecimal`, never `double`/`float`.** Floating point silently corrupts currency.
 6. **All `@OneToMany` are `FetchType.LAZY`.** Eager fetching triggers the N+1 query problem and can load the whole catalog on one request.
-7. **Stock lives only on `ProductVariant`.** There is no product-level inventory table.
+7. **Stock lives only on `ProductVariant`.** There is no product-level inventory table. A product sold **without variations** still has stock: it carries one hidden *default* variant (`ProductVariant.defaultVariant = true`, no size/colour) created with the product, holding the product's own stock (`ProductRequest.stockQuantity` on create, then edited on that variant). Adding the first real variation deactivates the default; removing the last real variation reactivates it at stock 0. Cart, checkout and reservations therefore always work on `productVariantId` — one stock path.
 
 ## Services overview
 
@@ -126,6 +126,7 @@ The *concept* of a product. Does NOT hold stock.
 | color | String | nullable |
 | priceOverride | BigDecimal | nullable (null = use Product.basePrice) |
 | stockQuantity | int | not null, >= 0 |
+| defaultVariant | boolean | not null, default false; at most one per product (the product's own stock when it has no variations) |
 | restockLevel | int | nullable (low-stock alert threshold) |
 | version | Long | **`@Version` — optimistic lock**, prevents overselling |
 

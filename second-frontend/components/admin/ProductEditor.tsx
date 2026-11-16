@@ -97,7 +97,7 @@ export function ProductEditor({
             <button className="btn btn-outline btn-sm" type="button" onClick={() => setVariantModal({ initial: null })}>{icons.plus} Add variant</button>
           </div>
           {variants.length === 0 ? (
-            <div className="card-body"><p style={{ color: "var(--text-secondary)", fontSize: 13 }}>No variants yet — add at least one so the product is purchasable.</p></div>
+            <div className="card-body"><p style={{ color: "var(--text-secondary)", fontSize: 13 }}>No stock row yet — products created now get one automatically; add a variation if this product comes in sizes or colours.</p></div>
           ) : (
             <div className="tbl-wrap" style={{ marginTop: 10 }}>
               <table className="tbl">
@@ -108,14 +108,16 @@ export function ProductEditor({
                   {variants.map((v) => (
                     <tr key={v.id}>
                       <td className="id-cell">{v.sku}</td>
-                      <td className="muted">{v.size ?? "—"}</td>
+                      <td className="muted">{v.defaultVariant ? "Product stock (no variations)" : v.size ?? "—"}</td>
                       <td className="muted">{v.color ?? "—"}</td>
                       <td className="num money">{formatMoney(v.effectivePrice)}</td>
                       <td className="num mono" style={{ fontSize: 12.5 }}>{v.stockQuantity}</td>
                       <td>{stockBadge(v)}</td>
                       <td className="num" style={{ whiteSpace: "nowrap" }}>
                         <button className="icon-btn" type="button" aria-label={`Edit ${v.sku}`} onClick={() => setVariantModal({ initial: v })}>{icons.edit}</button>{" "}
-                        <button className="icon-btn is-danger" type="button" aria-label={`Delete ${v.sku}`} disabled={busy === v.id} onClick={() => deleteVariant(v)}>{icons.trash}</button>
+                        {!v.defaultVariant && (
+                          <button className="icon-btn is-danger" type="button" aria-label={`Delete ${v.sku}`} disabled={busy === v.id} onClick={() => deleteVariant(v)}>{icons.trash}</button>
+                        )}
                       </td>
                     </tr>
                   ))}

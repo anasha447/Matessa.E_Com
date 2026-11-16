@@ -45,6 +45,13 @@ public class ProductVariant {
     @Column(nullable = false)
     private boolean active = true;   // soft delete
 
+    /**
+     * The hidden variant of a product that has no variations: it holds the product's own stock.
+     * Inactive while the product has real variations (sizes/colours).
+     */
+    @Column(name = "is_default", nullable = false)
+    private boolean defaultVariant = false;
+
     @Version
     private Long version;   // optimistic lock (anti-oversell)
 }

@@ -35,6 +35,8 @@ export interface ProductRequest {
   description?: string | null;
   basePrice: number;
   brand: string;
+  /** Create only: stock for a product sold without variations (held on its default variant). */
+  stockQuantity?: number;
 }
 
 export interface ProductResponse {
@@ -77,6 +79,8 @@ export interface ProductVariantResponse {
   stockQuantity: number;
   restockLevel: number;
   active: boolean;
+  /** The hidden variant of a product sold without variations: it holds the product's own stock. */
+  defaultVariant: boolean;
 }
 
 /** Authoritative live price/stock for one variant — use on PDP & cart (GET /api/variants/{id}). */

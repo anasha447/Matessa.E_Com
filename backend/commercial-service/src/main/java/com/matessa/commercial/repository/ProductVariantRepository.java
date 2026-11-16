@@ -12,6 +12,10 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     List<ProductVariant> findByProductIdOrderByIdAsc(Long productId);
 
+    java.util.Optional<ProductVariant> findByProductIdAndDefaultVariantTrue(Long productId);
+
+    long countByProductIdAndDefaultVariantFalseAndActiveTrue(Long productId);
+
     /**
      * Takes {@code quantity} off the shelf, but only if it is actually there.
      *

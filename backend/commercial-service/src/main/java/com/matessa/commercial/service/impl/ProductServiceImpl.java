@@ -25,13 +25,19 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductMapper productMapper;
+    private final com.matessa.commercial.repository.ProductVariantRepository variantRepository;
+    private final com.matessa.commercial.service.SkuGenerator skuGenerator;
 
     public ProductServiceImpl(ProductRepository productRepository,
                               CategoryRepository categoryRepository,
-                              ProductMapper productMapper) {
+                              ProductMapper productMapper,
+                              com.matessa.commercial.repository.ProductVariantRepository variantRepository,
+                              com.matessa.commercial.service.SkuGenerator skuGenerator) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.productMapper = productMapper;
+        this.variantRepository = variantRepository;
+        this.skuGenerator = skuGenerator;
     }
 
     @Override
@@ -73,7 +79,17 @@ public class ProductServiceImpl implements ProductService {
         validateCategory(request.categoryId());
         Product product = new Product();
         apply(product, request);
-        return productMapper.toResponse(productRepository.save(product));
+        Product saved = productRepository.save(product);
+        // Every product is sellable from the start: its hidden default variant holds the
+        // product-level stock until real variations (sizes/colours) are added.
+        com.matessa.commercial.entity.ProductVariant def = new com.matessa.commercial.entity.ProductVariant();
+        def.setProductId(saved.getId());
+        def.setSku(skuGenerator.generate(saved.getName(), null, null, variantRepository::existsBySku));
+        def.setStockQuantity(request.stockQuantity() == null ? 0 : request.stockQuantity());
+        def.setActive(true);
+        def.setDefaultVariant(true);
+        variantRepository.save(def);
+        return productMapper.toResponse(saved);
     }
 
     @Override

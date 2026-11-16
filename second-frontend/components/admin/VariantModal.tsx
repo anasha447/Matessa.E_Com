@@ -77,6 +77,7 @@ export function VariantModal({
           <input className="text-input mono-input" value="Auto-generated on save" readOnly disabled style={{ fontStyle: "italic", opacity: 0.7 }} />
         )}
       </Field>
+      {!initial?.defaultVariant && (
       <div className="field-row">
         <Field label="Size" hint="Blank if not sized.">
           <input className="text-input" value={form.size} onChange={set("size")} placeholder="M" />
@@ -85,6 +86,7 @@ export function VariantModal({
           <input className="text-input" value={form.color} onChange={set("color")} placeholder="Red" />
         </Field>
       </div>
+      )}
       <div className="field-row">
         <Field label="Price override" hint="Blank = use base price.">
           <input className="text-input" type="number" step="0.01" min="0" value={form.priceOverride} onChange={set("priceOverride")} />

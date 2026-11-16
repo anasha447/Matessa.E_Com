@@ -92,7 +92,7 @@ export function ProductBuyPanel({
       )}
 
       {/* Size pills */}
-      {sized.length > 0 && (
+      {sized.some((v) => v.size) && (
         <div className="mt-5">
           <p className="mb-2 font-body text-xs font-bold uppercase tracking-[0.18em] text-gray-500">Size</p>
           <div className="flex flex-wrap gap-2">

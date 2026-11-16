@@ -27,6 +27,7 @@ export function ProductModal({
     basePrice: initial?.basePrice?.toString() ?? "",
     brand: initial?.brand ?? "Adventure Dose",
     description: initial?.description ?? "",
+    stock: "0",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,7 @@ export function ProductModal({
     if (!form.slug.trim()) errs.slug = "Slug is required.";
     if (!form.categoryId) errs.categoryId = "Pick a category.";
     if (!(Number(form.basePrice) > 0)) errs.basePrice = "Base price must be positive.";
+    if (!initial && !(Number.isInteger(Number(form.stock)) && Number(form.stock) >= 0)) errs.stock = "Stock must be 0 or more.";
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
@@ -46,6 +48,7 @@ export function ProductModal({
       slug: form.slug.trim(),
       description: form.description.trim() || null,
       basePrice: Number(form.basePrice),
+      ...(initial ? {} : { stockQuantity: Number(form.stock) }),
       brand: form.brand.trim() || "Adventure Dose",
     };
     setBusy(true);
@@ -103,6 +106,11 @@ export function ProductModal({
           <input className="text-input" value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} />
         </Field>
       </div>
+      {!initial && (
+        <Field label="Stock" error={errors.stock} hint="For a product without sizes or colours. Add variations later to stock each one separately.">
+          <input className="text-input" type="number" min="0" step="1" value={form.stock} onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))} />
+        </Field>
+      )}
       <Field label="Description">
         <input className="text-input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
       </Field>

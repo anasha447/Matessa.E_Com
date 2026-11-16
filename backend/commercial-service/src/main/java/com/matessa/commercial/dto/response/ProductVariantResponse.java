@@ -13,6 +13,8 @@ public record ProductVariantResponse(
         BigDecimal effectivePrice,    // listPrice after the best active automatic discount
         int stockQuantity,
         Integer restockLevel,
-        boolean active
+        boolean active,
+        /** True for the hidden variant of a product with no variations (product-level stock). */
+        boolean defaultVariant
 ) {
 }

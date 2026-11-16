@@ -68,6 +68,14 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         variant.setSku(skuGenerator.generate(product.getName(), request.size(), request.color(),
                 variantRepository::existsBySku));
         apply(variant, request);
+        // The product now has real variations: its hidden default variant (product-level stock)
+        // stops being sold. Each variation carries its own stock from here on.
+        variantRepository.findByProductIdAndDefaultVariantTrue(productId).ifPresent(def -> {
+            if (def.isActive()) {
+                def.setActive(false);
+                variantRepository.save(def);
+            }
+        });
         return toResponse(variantRepository.save(variant), product, discountsFor(product));
     }
 
@@ -81,6 +89,11 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         ProductVariant variant = findVariant(variantId);
         // SKU is immutable once generated — edits to size/colour don't churn the identifier.
         apply(variant, request);
+        if (variant.isDefaultVariant()) {
+            // The default variant is the product itself: only stock, price and restock level apply.
+            variant.setSize(null);
+            variant.setColor(null);
+        }
         Product product = findProduct(variant.getProductId());
         return toResponse(variantRepository.save(variant), product, discountsFor(product));
     }
@@ -93,8 +106,21 @@ public class ProductVariantServiceImpl implements ProductVariantService {
     })
     public void delete(Long variantId) {
         ProductVariant variant = findVariant(variantId);
+        if (variant.isDefaultVariant()) {
+            throw new com.matessa.commercial.exception.BadRequestException(
+                    "This is the product's own stock; set it to 0 instead, or delete the product.");
+        }
         variant.setActive(false); // soft delete
         variantRepository.save(variant);
+        // Last real variation gone: the product is sold as itself again, from its default
+        // variant, starting out of stock until an admin sets the product's stock.
+        if (variantRepository.countByProductIdAndDefaultVariantFalseAndActiveTrue(variant.getProductId()) == 0) {
+            ProductVariant def = variantRepository.findByProductIdAndDefaultVariantTrue(variant.getProductId())
+                    .orElseGet(() -> newDefault(findProduct(variant.getProductId())));
+            def.setActive(true);
+            def.setStockQuantity(0);
+            variantRepository.save(def);
+        }
     }
 
     @Override
@@ -106,6 +132,17 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         BigDecimal effective = pricingService.applyBest(listPrice(variant, product), discountsFor(product));
         return new VariantPriceStockResponse(variant.getId(), product.getId(), variant.getSku(),
                 product.getName(), effective, variant.getStockQuantity(), available);
+    }
+
+    /** A fresh hidden default variant for a product (not yet saved). */
+    private ProductVariant newDefault(Product product) {
+        ProductVariant def = new ProductVariant();
+        def.setProductId(product.getId());
+        def.setSku(skuGenerator.generate(product.getName(), null, null, variantRepository::existsBySku));
+        def.setStockQuantity(0);
+        def.setActive(true);
+        def.setDefaultVariant(true);
+        return def;
     }
 
     private List<Discount> discountsFor(Product product) {
@@ -141,6 +178,6 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         return new ProductVariantResponse(variant.getId(), variant.getProductId(), variant.getSku(),
                 variant.getSize(), variant.getColor(), variant.getPriceOverride(),
                 listPrice, effective, variant.getStockQuantity(), variant.getRestockLevel(),
-                variant.isActive());
+                variant.isActive(), variant.isDefaultVariant());
     }
 }
