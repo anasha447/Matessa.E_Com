@@ -12,7 +12,8 @@
 //  - The copy is revealed by a short bottom-up wipe; the stat's rule draws in after it.
 //  - A faint leaf texture sits behind the panel only (BRAND §5: one pattern surface).
 //  - Titles are buttons that scroll to their reason (keyboard path; aria-current="step").
-//  - Phones swap the title list for the active title, a "03 / 06" counter and a dot stem.
+//  - Phones swap the title list for the active title, a "03 / 06" counter and a dot stem
+//    whose dots sprout the same leaf pair as they are reached.
 //  - Reduced motion → the static stacked list, no growth, no wipes.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -115,7 +116,7 @@ function useMedia(query: string, serverValue: boolean) {
 }
 
 /** Two leaves on a node of the stem; they unfurl when the reason is reached. */
-function LeafNode({ reached, active }: { reached: boolean; active: boolean }) {
+function LeafNode({ reached, active, scale = 1 }: { reached: boolean; active: boolean; scale?: number }) {
   return (
     <span
       aria-hidden="true"
@@ -150,7 +151,7 @@ function LeafNode({ reached, active }: { reached: boolean; active: boolean }) {
           top: -24,
           overflow: "visible",
           transformOrigin: "17px 24px",
-          transform: reached ? `scale(${active ? 1 : 0.86})` : "scale(0) rotate(-30deg)",
+          transform: reached ? `scale(${(active ? 1 : 0.86) * scale})` : "scale(0) rotate(-30deg)",
           opacity: reached ? 1 : 0,
           transition: `transform 0.7s ${EASE}, opacity 0.35s ease`,
         }}
@@ -322,25 +323,23 @@ export function WhyDrinkMate() {
                   {String(active + 1).padStart(2, "0")} / {String(N).padStart(2, "0")}
                 </span>
               </div>
-              <div aria-hidden="true" style={{ position: "relative", height: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              {/* Dot stem: the same leaf pair as the desktop stem unfurls from each dot as it is
+                  reached (room above the track for the leaves). */}
+              <div
+                aria-hidden="true"
+                style={{ position: "relative", height: 10, marginTop: 20, marginInline: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              >
                 <span style={{ position: "absolute", left: 4, right: 4, top: 4, height: 2, borderRadius: 2, background: "rgba(47,59,40,0.14)" }} />
                 <span
                   ref={dotFill}
                   style={{ position: "absolute", left: 4, right: 4, top: 4, height: 2, borderRadius: 2, background: GREEN, transformOrigin: "left center", transform: "scaleX(0)" }}
                 />
                 {BENEFITS.map((b, i) => (
-                  <span
-                    key={b.title}
-                    style={{
-                      position: "relative",
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      background: i <= active ? GREEN : PAGE,
-                      boxShadow: `0 0 0 1.5px ${i <= active ? GREEN : "rgba(47,59,40,0.22)"}`,
-                      transition: `background 0.35s ${EASE}`,
-                    }}
-                  />
+                  <span key={b.title} style={{ position: "relative", width: 10, height: 10 }}>
+                    <span style={{ position: "absolute", left: 5, top: 5 }}>
+                      <LeafNode reached={i <= active} active={i === active} scale={0.78} />
+                    </span>
+                  </span>
                 ))}
               </div>
             </div>

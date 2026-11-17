@@ -9,8 +9,8 @@
 //  - Capable devices: a real 3D pouch (hero/PouchScene) fades in over it once its textures
 //    load — drag to turn, tap to flip, ingredients orbit it. Skipped under reduced motion,
 //    data-saver, low-power devices or when WebGL is missing.
-//  - Both modes share the blend tabs and the ingredient chips below the stage; a chip (or a
-//    floating cut-out in 3D) highlights that ingredient and shows its taste note.
+//  - Both modes share the blend tabs below the stage. Tapping a floating cut-out (3D)
+//    highlights that ingredient and shows its taste note under the tabs.
 //  - Phone vs desktop layout is pure CSS (.mtsa-hero* in app/matessa.css), so the server
 //    already renders the right one - no desktop frame before the phone layout.
 //
@@ -444,38 +444,6 @@ export function HeroFlavorCycler() {
               })}
             </div>
 
-            {/* Phones: one swipeable row. Wider: wrap and centre. */}
-            <ul aria-label={`What is in ${flavor.name}`} className="mtsa-hero-chips">
-              {flavor.ingredients.map((ing) => {
-                const on = ing.name === selected;
-                return (
-                  <li key={ing.name} style={{ flex: "0 0 auto" }}>
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => select(on ? null : ing.name)}
-                      className="font-body"
-                      style={{
-                        minHeight: 36,
-                        padding: "0 14px",
-                        borderRadius: 999,
-                        border: `1px solid ${on ? flavor.deepText : "rgba(47,59,40,0.22)"}`,
-                        background: on ? flavor.deepText : "rgba(255,255,255,0.6)",
-                        color: on ? "#FFFFFF" : INK,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        whiteSpace: "nowrap",
-                        cursor: "pointer",
-                        transition: "background 0.25s ease, color 0.25s ease, border-color 0.25s ease",
-                      }}
-                    >
-                      {ing.name}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-
             <p
               aria-live="polite"
               className="font-body mtsa-hero-note"
@@ -493,13 +461,7 @@ export function HeroFlavorCycler() {
                 <>
                   <strong>{selectedIngredient.name}.</strong> {selectedIngredient.benefit}
                 </>
-              ) : (
-                <span style={{ opacity: 0.72 }}>
-                  {show3D
-                    ? "Drag the pouch to turn it. Pick an ingredient to see what it brings."
-                    : "Tap the pouch to flip it. Pick an ingredient to see what it brings."}
-                </span>
-              )}
+              ) : null}
             </p>
           </div>
         </div>

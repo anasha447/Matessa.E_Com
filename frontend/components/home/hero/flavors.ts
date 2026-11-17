@@ -43,7 +43,7 @@ export const FLAVORS: HeroFlavor[] = [
     back: "/brand/pack/masala-back.webp",
     ingredients: [
       MATE,
-      { name: "Cinnamon", benefit: "Sweet warmth that rounds off the mate.", imgs: ["/brand/ing-cinnamon2.webp"] },
+      { name: "Cinnamon", benefit: "Sweet warmth that rounds off the mate.", imgs: ["/brand/ing-cinnamon1.webp"] },
       { name: "Star anise", benefit: "A soft, liquorice-like sweetness.", imgs: ["/brand/ing-anise1.webp"] },
       { name: "Cardamom", benefit: "Bright and floral, the soul of masala.", imgs: ["/brand/ing-cardamom.png"] },
       { name: "Clove", benefit: "Deep, lingering spice.", imgs: ["/brand/ing-clove1.webp"] },

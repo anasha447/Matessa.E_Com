@@ -270,17 +270,6 @@
   transition: opacity 0.7s ease;
   z-index: 4;
 }
-.mtsa-hero-chips {
-  list-style: none;
-  margin: 0;
-  display: flex;
-  gap: 8px;
-  max-width: 100%;
-  flex-wrap: wrap;
-  justify-content: center;
-  padding: 2px 0;
-  scrollbar-width: none;
-}
 .mtsa-hero-note { padding: 0; }
 @media (max-width: 840px) {
   .mtsa-hero {
@@ -298,14 +287,7 @@
   }
   .mtsa-hero-stage { height: clamp(380px, 104vw, 540px); }
   .mtsa-hero-3d { inset: 0; }
-  .mtsa-hero-chips {
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding: 2px var(--hero-gutter);
-    -webkit-overflow-scrolling: touch;
-  }
-  .mtsa-hero-note { padding: 0 var(--hero-gutter); }
+    .mtsa-hero-note { padding: 0 var(--hero-gutter); }
 }
 /* First-paint ingredient orbit (CSS twin of the 3D rings). Each runs half a lap, alternating. */
 @keyframes mtsa-orbit-x {
