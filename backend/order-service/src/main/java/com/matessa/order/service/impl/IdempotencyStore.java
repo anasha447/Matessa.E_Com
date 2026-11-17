@@ -77,6 +77,13 @@ public class IdempotencyStore {
                 "Your order is still being placed. Please wait a moment, then check your orders.");
     }
 
+    /** The order a finished key produced for this requester, if any. Claims nothing. */
+    public Optional<Long> finishedOrder(String key, String requester) {
+        List<Long> ids = jdbc.queryForList("select order_id from " + table()
+                + " where idem_key = ? and requester = ? and status = 'DONE'", Long.class, key, requester);
+        return ids.isEmpty() || ids.getFirst() == null ? Optional.empty() : Optional.of(ids.getFirst());
+    }
+
     /** Marks the key done; call inside the transaction that commits the order. */
     public void complete(String key, long orderId) {
         jdbc.update("update " + table() + " set status = 'DONE', order_id = ? where idem_key = ?", orderId, key);

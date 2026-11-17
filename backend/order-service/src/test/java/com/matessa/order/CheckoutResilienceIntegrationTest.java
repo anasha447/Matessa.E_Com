@@ -201,6 +201,40 @@ class CheckoutResilienceIntegrationTest {
     }
 
     @Test
+    void registeredRetry_afterSuccess_returnsTheOrder_althoughTheCartWasEmptied() throws Exception {
+        stubReservation(0);
+        COMMERCIAL.stubFor(com.github.tomakehurst.wiremock.client.WireMock.get(urlEqualTo("/api/variants/10")).willReturn(okJson(
+                "{\"variantId\":10,\"productId\":1,\"sku\":\"SKU-10\",\"productName\":\"Item 10\","
+                        + "\"effectivePrice\":100.00,\"stockQuantity\":50,\"available\":true}")));
+        String bearer = "Bearer " + token(String.valueOf(9000 + new java.util.Random().nextInt(1000)));
+        assertThat(client().post().uri("/api/cart/items").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("productVariantId", 10, "quantity", 1)).retrieve().toBodilessEntity().getStatusCode().is2xxSuccessful())
+                .isTrue();
+        Map<String, Object> body = new java.util.HashMap<>(guestOrder("ignored@example.com", 1));
+        body.remove("guestEmail");
+        body.remove("items");
+        String key = UUID.randomUUID().toString();
+
+        ResponseEntity<Map<String, Object>> first = client().post().uri("/api/orders").header("Authorization", bearer)
+                .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).body(body).retrieve().toEntity(MAP);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        // The response was "lost": the shopper retries with the same key. The cart is now empty.
+        ResponseEntity<Map<String, Object>> retry = client().post().uri("/api/orders").header("Authorization", bearer)
+                .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).body(body).retrieve().toEntity(MAP);
+        assertThat(retry.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(retry.getBody().get("orderNumber")).isEqualTo(first.getBody().get("orderNumber"));
+        assertThat(reservationIdsSent()).hasSize(1);
+
+        // Same key, different request: still refused.
+        Map<String, Object> changed = new java.util.HashMap<>(body);
+        changed.put("shippingMethod", "Express");
+        ResponseEntity<Map<String, Object>> other = client().post().uri("/api/orders").header("Authorization", bearer)
+                .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).body(changed).retrieve().toEntity(MAP);
+        assertThat(other.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT);
+    }
+
+    @Test
     void twoSimultaneousSubmits_withOneKey_placeOneOrder() throws Exception {
         stubReservation(1500); // keep the first request in flight while the second arrives
         String key = UUID.randomUUID().toString();

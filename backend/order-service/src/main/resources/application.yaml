@@ -87,6 +87,16 @@ resilience4j:
       default:
         timeout-duration: 3s
         cancel-running-future: true
+    # Reserve/release are write transactions (row locks, coupon claim) and the first call
+    # after a restart pays JIT + pool warm-up. 3s timed them out on a cold service, leaving
+    # stock HELD until expiry. Still under the gateway's 12s order-route limit.
+    instances:
+      CommercialClientreserveReservationRequest:
+        base-config: default
+        timeout-duration: ${CHECKOUT_RESERVE_TIMEOUT:8s}
+      CommercialClientreleaseReservationString:
+        base-config: default
+        timeout-duration: ${CHECKOUT_RESERVE_TIMEOUT:8s}
 
 # Stores served by this deployment; each id is a Postgres schema in this service's DB.
 app:

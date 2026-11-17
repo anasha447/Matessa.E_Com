@@ -37,6 +37,10 @@ public class CommercialClientFallback implements FallbackFactory<CommercialClien
 
             @Override
             public ReservationResult reserve(ReservationRequest request) {
+                if (isRefusal(cause)) {
+                    log.info("Reservation refused: {}", cause.getMessage()); // out of stock etc., not an outage
+                    throw translate(cause);
+                }
                 log.warn("commercial-service unavailable reserving {} line(s): {}",
                         request == null || request.items() == null ? 0 : request.items().size(),
                         cause.toString());
@@ -61,8 +65,12 @@ public class CommercialClientFallback implements FallbackFactory<CommercialClien
      * the customer and hides a legitimate 409 behind a 503. Only genuine transport failures
      * become unavailability.
      */
+    private static boolean isRefusal(Throwable cause) {
+        return cause instanceof ConflictException || cause instanceof BadRequestException;
+    }
+
     private RuntimeException translate(Throwable cause) {
-        if (cause instanceof ConflictException || cause instanceof BadRequestException) {
+        if (isRefusal(cause)) {
             return (RuntimeException) cause;
         }
         return new ServiceUnavailableException("Catalog service is temporarily unavailable, please retry");

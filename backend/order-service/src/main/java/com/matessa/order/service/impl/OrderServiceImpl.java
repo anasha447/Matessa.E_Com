@@ -117,6 +117,23 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public OrderResponse checkout(Long userId, CheckoutRequest request, String idempotencyKey) {
+        // A retry of a checkout that already succeeded (the response was lost, the shopper hit
+        // retry) arrives with the cart already emptied by that order. Answer it from the order
+        // the key produced: its items are the basket that was hashed, so the normal key check
+        // below still returns that order for the same request and 422 for a different one.
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
+        if (key != null && key.length() <= 80) {
+            Optional<Long> finished = idempotency.finishedOrder(key, "u:" + userId);
+            if (finished.isPresent()) {
+                List<CartItemRequest> placed = orderItemRepository.findByOrderIdOrderByIdAsc(finished.get()).stream()
+                        .map(item -> new CartItemRequest(item.getProductVariantId(), item.getQuantity()))
+                        .toList();
+                if (!placed.isEmpty()) {
+                    return createOrder(userId, null, placed, request.shippingAddress(), request.paymentMethod(),
+                            request.couponCode(), request.shippingMethod(), key, true);
+                }
+            }
+        }
         List<CartItemRequest> lines = transactions.execute(tx -> {
             Cart cart = cartRepository.findByUserId(userId)
                     .orElseThrow(() -> new BadRequestException("Cart is empty"));
