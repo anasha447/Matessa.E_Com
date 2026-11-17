@@ -27,6 +27,13 @@ export const metadata: Metadata = {
     "Premium yerba mate for India — Masala, Lemon & Ginger and Raw loose-leaf blends, plus gourds and bombillas. Natural, focused energy from matessa.in.",
 };
 
+const SCROLL_TOP_ON_RELOAD = `(function(){try{
+var nav=performance.getEntriesByType("navigation")[0];
+if(!nav||nav.type!=="reload"||location.hash)return;
+history.scrollRestoration="manual";window.scrollTo(0,0);
+addEventListener("load",function(){window.scrollTo(0,0);setTimeout(function(){history.scrollRestoration="auto";},0);},{once:true});
+}catch(e){}})();`;
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -38,6 +45,13 @@ export default async function RootLayout({
   const authed = jar.has(ACCESS_COOKIE) || jar.has(REFRESH_COOKIE);
   return (
     <html lang="en" className={`${asul.variable} ${quicksand.variable}`}>
+      <head>
+        {/* A refresh starts at the top of the page. Browsers restore the old scroll position
+            on reload (history.scrollRestoration = "auto"); this turns that off for a reload
+            only, before first paint, then turns it back on so Back/Forward still return to
+            where the visitor was. A URL with a #section still jumps to that section. */}
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_TOP_ON_RELOAD }} />
+      </head>
       {/* suppressHydrationWarning: browser extensions inject attributes onto <body>
           before React hydrates — harmless, but otherwise logs a mismatch. */}
       <body suppressHydrationWarning>

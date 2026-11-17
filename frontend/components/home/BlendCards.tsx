@@ -167,18 +167,19 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
                     href={`/product/${b.slug}`}
                     onFocus={() => setHovered(i)}
                     onBlur={() => setHovered(-1)}
-                    className="hover:bg-orange"
+                    // Brand orange (--color-orange) with its hover shade. As classes, not an
+                    // inline background, so the hover state is not overridden.
+                    className="bg-orange hover:bg-orange-hover"
                     style={{
                       position: "relative",
                       alignSelf: "stretch",
                       marginTop: 4,
                       transform: hot ? "translateY(0px)" : "translateY(14px)",
                       opacity: hot ? 1 : 0,
-                      background: "#3E5F2D",
                       color: "#FFFFFF",
                       padding: "13px 28px",
                       borderRadius: 999,
-                      border: "1px solid #2F3B28",
+                      border: "1px solid var(--color-orange)",
                       fontFamily: "var(--font-body)",
                       fontWeight: 700,
                       fontSize: 14,
