@@ -4,12 +4,15 @@
 // left, pouch on a color-field circle right); the pouch stage itself now diverges from it:
 //
 //  - First paint / fallback: a two-sided CSS pouch built from the flat pack art. Tap to flip
-//    it and read the back; the flavor's ingredient cut-outs float around it.
+//    it and read the back; the flavor's ingredient cut-outs orbit it in CSS on the same
+//    loop as the 3D rings, so the hand-over to WebGL is seamless.
 //  - Capable devices: a real 3D pouch (hero/PouchScene) fades in over it once its textures
 //    load — drag to turn, tap to flip, ingredients orbit it. Skipped under reduced motion,
 //    data-saver, low-power devices or when WebGL is missing.
 //  - Both modes share the blend tabs and the ingredient chips below the stage; a chip (or a
 //    floating cut-out in 3D) highlights that ingredient and shows its taste note.
+//  - Phone vs desktop layout is pure CSS (.mtsa-hero* in app/matessa.css), so the server
+//    already renders the right one - no desktop frame before the phone layout.
 //
 // See frontend/animation.hero.md for the full plan and DESIGN-SYSTEM.md §10 for the rules.
 
@@ -25,27 +28,27 @@ const QUIET_MS = 10000;
 const INK = "#2F3B28";
 const CREAM = "#FDF5E6";
 
-// Where the cut-outs sit around the CSS pouch (order = sprite order within a flavor).
-const FLAT_SLOTS: { side: "left" | "right"; x: string; y: string; scale: number; rotate: number; float: string }[] = [
-  { side: "left", x: "3%", y: "12%", scale: 1, rotate: -8, float: "6.4s ease-in-out -1.2s" },
-  { side: "right", x: "4%", y: "10%", scale: 0.9, rotate: 10, float: "5.6s ease-in-out 0s" },
-  { side: "left", x: "6%", y: "62%", scale: 0.72, rotate: 14, float: "7.2s ease-in-out -2.4s" },
-  { side: "right", x: "7%", y: "60%", scale: 0.76, rotate: -12, float: "5.9s ease-in-out -1.8s" },
-  { side: "left", x: "0%", y: "38%", scale: 0.6, rotate: 6, float: "6.8s ease-in-out -1.6s" },
-  { side: "right", x: "0%", y: "36%", scale: 0.62, rotate: -6, float: "5.4s ease-in-out -0.6s" },
-  { side: "right", x: "20%", y: "2%", scale: 0.55, rotate: 18, float: "6.1s ease-in-out -3s" },
-];
+/** One lap of the CSS orbit; matches the 3D rings (0.3 rad/s). */
+const ORBIT_S = 21;
+const RING_TOP = ["26%", "70%"];
 
-function useIsMobile() {
-  const [mobile, setMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 840px)");
-    const on = () => setMobile(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return mobile;
+/** Where a CSS cut-out sits on its ring, and its static spot when motion is off. */
+function orbitSlot(k: number, count: number) {
+  const ring = k % 2;
+  const inRing = Math.floor(k / 2);
+  const ringCount = Math.ceil((count - ring) / 2);
+  const f = (inRing / Math.max(1, ringCount) + ring * 0.17) % 1; // fraction of a lap
+  const depth = Math.sin(f * Math.PI * 2);
+  return {
+    top: RING_TOP[ring],
+    size: ring === 0 ? 1 : 0.82,
+    rotate: ((k * 37) % 30) - 15,
+    delayX: -f * ORBIT_S,
+    delayDepth: -f * ORBIT_S - ORBIT_S / 4,
+    cx: -Math.cos(f * Math.PI * 2),
+    scale: 0.74 + 0.32 * ((depth + 1) / 2),
+    front: depth > 0,
+  };
 }
 
 /** Can this device comfortably run the WebGL scene? */
@@ -85,7 +88,6 @@ export function HeroFlavorCycler() {
   const [flipped, setFlipped] = useState(false);
   const [wantBack, setWantBack] = useState(false);
   const [turns, setTurns] = useState(0);
-  const isMobile = useIsMobile();
 
   const hover = useRef(false);
   const busy = useRef(false);
@@ -162,56 +164,17 @@ export function HeroFlavorCycler() {
     setFlipped((f) => !f);
   };
 
-  const gutter = "clamp(20px, 4vw, 48px)";
   const selectedIngredient = flavor.ingredients.find((ing) => ing.name === selected);
   const flavorSprites = (i: number) => HERO_SPRITES.filter((s) => s.flavor === i);
 
   return (
-    <section
-      id="top"
-      aria-label="Hero"
-      style={{
-        position: "relative",
-        overflowX: "clip",
-        minHeight: isMobile ? "auto" : "max(640px, 96svh)",
-      }}
-    >
+    <section id="top" aria-label="Hero" className="mtsa-hero">
       {/* Desktop: full-bleed color-field circle anchored to the right edge, bleeding
           off-screen so only the left half (reaching centre) shows; the section's
           overflow-x clips the off-screen part. (Mobile circle lives inside the stage.) */}
-      {!isMobile && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: "50%",
-            right: 0,
-            transform: "translate(34%, -50%)",
-            width: "min(1180px, 78vw)",
-            aspectRatio: "1",
-            borderRadius: "50%",
-            background: flavor.circle,
-            transition: "background 1.1s ease",
-            zIndex: 0,
-          }}
-        />
-      )}
+      <div aria-hidden="true" className="mtsa-hero-circle mtsa-hero-circle--desk" style={{ background: flavor.circle }} />
 
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          maxWidth: 1360,
-          margin: "0 auto",
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: "clamp(12px, 3vw, 40px)",
-          padding: isMobile
-            ? `clamp(84px, 12vh, 120px) ${gutter} 0`
-            : `clamp(96px, 14vh, 140px) ${gutter} clamp(28px, 5vh, 56px)`,
-        }}
-      >
+      <div className="mtsa-hero-inner">
         {/* Left: copy (design shows only the H1) */}
         <div style={{ flex: "1 1 430px", minWidth: 280, position: "relative", zIndex: 5 }}>
           <h1
@@ -235,45 +198,14 @@ export function HeroFlavorCycler() {
 
         {/* Right: pouch stage + controls */}
         <div
+          className="mtsa-hero-stagecol"
           onMouseEnter={() => (hover.current = true)}
           onMouseLeave={() => (hover.current = false)}
-          style={{
-            flex: "1 1 460px",
-            minWidth: 0,
-            position: "relative",
-            // Mobile: bleed to the viewport edges (cancel the wrapper's side padding) and clip
-            // the circle there + at the marquee below, so it fills the width with no gutters.
-            margin: isMobile ? `0 calc(-1 * ${gutter})` : undefined,
-            overflow: isMobile ? "hidden" : "visible",
-            paddingBottom: isMobile ? 26 : 0,
-          }}
         >
-          {isMobile && (
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "clamp(70px, 18vw, 130px)",
-                transform: "translateX(-50%)",
-                width: "max(142vw, 760px)",
-                aspectRatio: "1",
-                borderRadius: "50%",
-                background: flavor.circle,
-                transition: "background 1.1s ease",
-                zIndex: 0,
-              }}
-            />
-          )}
+          <div aria-hidden="true" className="mtsa-hero-circle mtsa-hero-circle--mob" style={{ background: flavor.circle }} />
 
           {/* ── Stage ─────────────────────────────────────────────────────────── */}
-          <div
-            style={{
-              position: "relative",
-              height: isMobile ? "clamp(380px, 104vw, 540px)" : "clamp(400px, 46vw, 600px)",
-              zIndex: 1,
-            }}
-          >
+          <div className="mtsa-hero-stage">
             <p className="sr-only">Matessa {flavor.name} yerba mate pouch</p>
 
             {/* ground shadow */}
@@ -288,6 +220,8 @@ export function HeroFlavorCycler() {
                 height: 30,
                 background: "radial-gradient(ellipse at center, rgba(24,32,16,0.26), transparent 68%)",
                 filter: "blur(7px)",
+                opacity: show3D ? 0 : 1,
+                transition: "opacity 0.7s ease",
               }}
             />
 
@@ -303,47 +237,64 @@ export function HeroFlavorCycler() {
                   transition: "opacity 0.7s ease",
                 }}
               >
-                {HERO_FLAVORS.map((_, fi) =>
-                  flavorSprites(fi).map((s, k) => {
-                    const slot = FLAT_SLOTS[k % FLAT_SLOTS.length];
+                {HERO_FLAVORS.map((_, fi) => {
+                  const sprites = flavorSprites(fi);
+                  return sprites.map((s, k) => {
+                    const o = orbitSlot(k, sprites.length);
                     const on = fi === active && entered;
                     const lit = selected === s.ingredient;
                     return (
+                      // Ring position: z-order flips as it passes behind / in front of the pouch.
                       <div
                         key={`${fi}-${s.src}`}
                         aria-hidden="true"
                         style={{
                           position: "absolute",
-                          [slot.side]: slot.x,
-                          bottom: slot.y,
-                          width: `calc(clamp(58px, 10vw, 128px) * ${slot.scale})`,
+                          left: "50%",
+                          top: o.top,
+                          width: `calc(clamp(58px, 10vw, 128px) * ${o.size})`,
                           pointerEvents: "none",
-                          zIndex: k < 2 ? 3 : 1,
+                          zIndex: o.front ? 3 : 1,
+                          animation: `mtsa-orbit-z ${ORBIT_S / 2}s ease-in-out ${o.delayDepth}s infinite alternate`,
                           opacity: on ? (selected && !lit ? 0.4 : 1) : 0,
-                          transform: on ? `translateY(0) scale(${lit ? 1.22 : 1})` : "translateY(40px) scale(0.72)",
+                          transform: on ? "translate(-50%, -50%)" : "translate(-50%, calc(-50% + 40px)) scale(0.72)",
                           transition: on
                             ? `opacity 0.6s ease ${0.25 + k * 0.06}s, transform 0.9s cubic-bezier(0.22, 0.68, 0.2, 1) ${0.25 + k * 0.06}s`
                             : "opacity 0.35s ease, transform 0.45s ease",
                         }}
                       >
-                        <div style={{ animation: `mtsa-float ${slot.float} infinite` }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={s.src}
-                            alt=""
-                            draggable={false}
-                            loading={fi === 0 ? "eager" : "lazy"}
+                        <div
+                          style={{
+                            transform: `translateX(calc(var(--mtsa-orbit-r) * ${o.cx.toFixed(3)}))`,
+                            animation: `mtsa-orbit-x ${ORBIT_S / 2}s ease-in-out ${o.delayX}s infinite alternate`,
+                          }}
+                        >
+                          <div
                             style={{
-                              width: "100%",
-                              transform: `rotate(${slot.rotate}deg)`,
-                              filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.18))",
+                              transform: `scale(${o.scale.toFixed(3)})`,
+                              animation: `mtsa-orbit-depth ${ORBIT_S / 2}s ease-in-out ${o.delayDepth}s infinite alternate`,
                             }}
-                          />
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={s.src}
+                              alt=""
+                              draggable={false}
+                              loading={fi === 0 ? "eager" : "lazy"}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                transform: `rotate(${o.rotate}deg) scale(${lit ? 1.22 : 1})`,
+                                transition: "transform 0.4s ease",
+                                filter: "drop-shadow(0 10px 14px rgba(24,32,16,0.18))",
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     );
-                  }),
-                )}
+                  });
+                })}
 
                 <div
                   style={{
@@ -438,13 +389,10 @@ export function HeroFlavorCycler() {
             {/* 3D pouch + orbiting ingredients */}
             {mode === "3d" && (
               <div
+                className="mtsa-hero-3d"
                 style={{
-                  position: "absolute",
-                  inset: isMobile ? 0 : "0 -6%",
                   opacity: show3D ? 1 : 0,
                   pointerEvents: show3D ? "auto" : "none",
-                  transition: "opacity 0.7s ease",
-                  zIndex: 4,
                 }}
               >
                 <SceneBoundary onError={onSceneError}>
@@ -496,23 +444,8 @@ export function HeroFlavorCycler() {
               })}
             </div>
 
-            <ul
-              aria-label={`What is in ${flavor.name}`}
-              style={{
-                listStyle: "none",
-                margin: 0,
-                display: "flex",
-                gap: 8,
-                maxWidth: "100%",
-                // Phones: one swipeable row. Wider: wrap and centre.
-                flexWrap: isMobile ? "nowrap" : "wrap",
-                justifyContent: isMobile ? "flex-start" : "center",
-                overflowX: isMobile ? "auto" : "visible",
-                padding: isMobile ? `2px ${gutter}` : "2px 0",
-                scrollbarWidth: "none",
-                WebkitOverflowScrolling: "touch",
-              }}
-            >
+            {/* Phones: one swipeable row. Wider: wrap and centre. */}
+            <ul aria-label={`What is in ${flavor.name}`} className="mtsa-hero-chips">
               {flavor.ingredients.map((ing) => {
                 const on = ing.name === selected;
                 return (
@@ -545,12 +478,11 @@ export function HeroFlavorCycler() {
 
             <p
               aria-live="polite"
-              className="font-body"
+              className="font-body mtsa-hero-note"
               style={{
                 margin: 0,
                 minHeight: "2.9em",
                 maxWidth: "36ch",
-                padding: `0 ${isMobile ? gutter : "0px"}`,
                 textAlign: "center",
                 fontSize: 14,
                 lineHeight: 1.45,

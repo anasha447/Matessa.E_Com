@@ -2,7 +2,6 @@
 // This is brand copy for the hero only — the sellable catalog still comes from the API.
 //
 // A flavor joins the hero once it has BOTH `front` and `back` pack art (see HERO_FLAVORS).
-// Raw Mate is listed without art so adding it later is two textures + two lines here.
 
 export interface HeroIngredient {
   name: string;
@@ -72,7 +71,11 @@ export const FLAVORS: HeroFlavor[] = [
     name: "Raw",
     deepText: "#8F7A33",
     circle: "radial-gradient(circle at 32% 26%, #F1E9D0 0%, #E4D5A8 100%)",
-    // front / back: add when the Raw Mate pack art arrives.
+    // Front: cut from the product photo. Back: the shared back layout recoloured to Raw's
+    // cream kraft (scratch build) until the printed Raw back art is supplied - replace
+    // raw-back.webp with a 1280x2138 crop like the others.
+    front: "/brand/pack/raw-front.webp",
+    back: "/brand/pack/raw-back.webp",
     ingredients: [MATE],
   },
 ];
