@@ -9,7 +9,7 @@
 //
 // Shape (matched to the product photos in public/packaging details):
 //   - top: a flat, crimped heat-seal strip with fine seal lines, then the zip track (two
-//     raised beads) about 11% down from the top edge;
+//     raised beads) 10% down from the top edge, above the logo;
 //   - body: thin under the zip, flaring out to its fullest in the lower third;
 //   - base: a bottom gusset — the faces stay apart at the bottom and a lens-shaped base
 //     closes them, so the pouch stands on its own footprint instead of tapering to a line;
@@ -30,9 +30,10 @@ const POUCH_W = POUCH_H * PACK_ASPECT;
 const BELLY = 0.29;
 /** Half-thickness of the flat, double-layer heat-seal areas. */
 const SEAL_Z = 0.012;
+// Zip 10% below the top edge (as on the product photos): the pack art keeps its logo below it.
 /** Heights from the bottom (0) to the top (1) of the face. */
-const ZIP_V = 0.885;
-const SEAL_V = 0.905;
+const ZIP_V = 0.9;
+const SEAL_V = 0.918;
 /** Rounded-corner radius of the pack art, as a fraction of its width. */
 const CORNER = 0.045;
 const SPIN_SECONDS = 1.5;
