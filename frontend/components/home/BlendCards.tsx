@@ -3,13 +3,12 @@
 // "Our Blends" — faithful port of Matessa Landing v4 §Three Blends One Leaf,
 // wired to the live catalog. Left-aligned heading; tinted cards (radius 22px) with
 // a 320px pouch stage; the leaf-pattern overlay tints + pans in on hover; the pouch
-// straightens and lifts; the full-width pill Add-to-Cart slides up. No prices on the
-// cards (per the design) — the card links to the PDP. Mobile: 80% scroll-snap
+// straightens and lifts; the full-width pill "Explore Blend" slides up and opens the
+// product page (choosing a size happens there). No prices on the cards (per the design). Mobile: 80% scroll-snap
 // carousel with edge bleed; the centered card counts as hovered.
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useCart } from "@/components/cart/CartContext";
 import { Reveal } from "@/components/Reveal";
 
 function useIsMobile() {
@@ -29,7 +28,7 @@ export interface BlendCardData {
   slug: string;
   price: number;
   image: string;
-  /** default variant used for quick add-to-cart; null disables the button */
+  /** Default variant (no longer used by the card, which links to the product page). */
   variantId: number | null;
 }
 
@@ -51,8 +50,6 @@ const FALLBACK_SKIN: Skin = { bg: "#EFE7CD", overlay: "#EADBA2", label: "Small-B
 
 export function BlendCards({ blends }: { blends: BlendCardData[] }) {
   const [hovered, setHovered] = useState(-1);
-  const [added, setAdded] = useState<string | null>(null);
-  const { addItem, open } = useCart();
   const scroller = useRef<HTMLDivElement>(null);
   const [centered, setCentered] = useState(0);
   const isMobile = useIsMobile();
@@ -72,18 +69,6 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
       }
     });
     setCentered(best);
-  };
-
-  const add = async (b: BlendCardData) => {
-    if (b.variantId == null) return;
-    try {
-      await addItem(b.variantId, 1, { name: b.name, price: b.price, image: b.image });
-      setAdded(b.slug);
-      setTimeout(() => setAdded(null), 1600);
-      open();
-    } catch {
-      // cart errors surface in the drawer; keep the card calm
-    }
   };
 
   return (
@@ -178,18 +163,18 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
                       <Link href={`/product/${b.slug}`}>{b.name}</Link>
                     </h3>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => add(b)}
-                    disabled={b.variantId == null}
-                    className="hover:bg-orange disabled:opacity-40"
+                  <Link
+                    href={`/product/${b.slug}`}
+                    onFocus={() => setHovered(i)}
+                    onBlur={() => setHovered(-1)}
+                    className="hover:bg-orange"
                     style={{
                       position: "relative",
                       alignSelf: "stretch",
                       marginTop: 4,
                       transform: hot ? "translateY(0px)" : "translateY(14px)",
                       opacity: hot ? 1 : 0,
-                      background: added === b.slug ? "#F26323" : "#3E5F2D",
+                      background: "#3E5F2D",
                       color: "#FFFFFF",
                       padding: "13px 28px",
                       borderRadius: 999,
@@ -197,13 +182,14 @@ export function BlendCards({ blends }: { blends: BlendCardData[] }) {
                       fontFamily: "var(--font-body)",
                       fontWeight: 700,
                       fontSize: 14,
-                      cursor: "pointer",
+                      textAlign: "center",
+                      textDecoration: "none",
                       transition: "transform 0.45s cubic-bezier(0.22, 0.68, 0.2, 1), opacity 0.35s ease, background 0.3s ease",
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {added === b.slug ? "Added to Cart" : "Add to Cart"}
-                  </button>
+                    Explore Blend
+                  </Link>
                 </div>
               </Reveal>
             );
