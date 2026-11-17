@@ -3,12 +3,12 @@
 // Landing hero. Layout follows design-source/project/Matessa Landing v4.dc.html §Hero (H1
 // left, pouch on a color-field circle right); the pouch stage itself now diverges from it:
 //
-//  - First paint / fallback: a two-sided CSS pouch built from the flat pack art. Tap to flip
-//    it and read the back; the flavor's ingredient cut-outs orbit it in CSS on the same
-//    loop as the 3D rings, so the hand-over to WebGL is seamless.
-//  - Capable devices: a real 3D pouch (hero/PouchScene) fades in over it once its textures
-//    load — drag to turn, tap to flip, ingredients orbit it. Skipped under reduced motion,
-//    data-saver, low-power devices or when WebGL is missing.
+//  - Capable devices: a real 3D pouch (hero/PouchScene) fades in once its textures load
+//    — drag to turn, tap to flip, ingredients orbit it. Nothing else is drawn in the
+//    stage first, so there is no second, flat pouch to swap out.
+//  - Fallback only (reduced motion, data-saver, low-power devices, no WebGL, or a WebGL
+//    error): a two-sided CSS pouch built from the flat pack art. Tap to flip it and read
+//    the back; the flavor's ingredient cut-outs orbit it in CSS.
 //  - Both modes share the blend tabs below the stage. Tapping a floating cut-out (3D)
 //    highlights that ingredient and shows its taste note under the tabs.
 //  - Phone vs desktop layout is pure CSS (.mtsa-hero* in app/matessa.css), so the server
@@ -81,9 +81,9 @@ class SceneBoundary extends Component<{ onError: () => void; children: ReactNode
 export function HeroFlavorCycler() {
   const [active, setActive] = useState(0);
   const [entered, setEntered] = useState(false);
-  const [mode, setMode] = useState<"flat" | "3d">("flat");
+  // pending until the first frame decides; the CSS pouch exists only for devices without 3D.
+  const [mode, setMode] = useState<"pending" | "flat" | "3d">("pending");
   const [sceneReady, setSceneReady] = useState(false);
-  const [flatGone, setFlatGone] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [wantBack, setWantBack] = useState(false);
@@ -101,7 +101,7 @@ export function HeroFlavorCycler() {
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const raf = requestAnimationFrame(() => {
       setEntered(true);
-      if (canRun3D()) setMode("3d");
+      setMode(canRun3D() ? "3d" : "flat");
     });
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -109,13 +109,6 @@ export function HeroFlavorCycler() {
   useEffect(() => {
     busy.current = selected !== null || flipped;
   }, [selected, flipped]);
-
-  // Once the 3D pouch has faded in, drop the CSS one so its animations stop running.
-  useEffect(() => {
-    if (!show3D) return;
-    const id = setTimeout(() => setFlatGone(true), 900);
-    return () => clearTimeout(id);
-  }, [show3D]);
 
   const go = useCallback((i: number) => {
     setActive((a) => {
@@ -148,7 +141,6 @@ export function HeroFlavorCycler() {
   const onSceneError = useCallback(() => {
     setMode("flat");
     setSceneReady(false);
-    setFlatGone(false);
   }, []);
   const select = useCallback(
     (name: string | null) => {
@@ -220,20 +212,17 @@ export function HeroFlavorCycler() {
                 height: 30,
                 background: "radial-gradient(ellipse at center, rgba(24,32,16,0.26), transparent 68%)",
                 filter: "blur(7px)",
-                opacity: show3D ? 0 : 1,
+                opacity: mode === "flat" ? 1 : 0,
                 transition: "opacity 0.7s ease",
               }}
             />
 
-            {/* CSS pouch + floating cut-outs: first paint, and the fallback when 3D is off */}
-            {!flatGone && (
+            {/* CSS pouch + orbiting cut-outs: only for devices that cannot run the 3D scene */}
+            {mode === "flat" && (
               <div
-                aria-hidden={show3D}
                 style={{
                   position: "absolute",
                   inset: 0,
-                  opacity: show3D ? 0 : 1,
-                  pointerEvents: show3D ? "none" : "auto",
                   transition: "opacity 0.7s ease",
                 }}
               >
@@ -316,7 +305,7 @@ export function HeroFlavorCycler() {
                       onClick={flip}
                       onPointerEnter={() => setWantBack(true)}
                       onFocus={() => setWantBack(true)}
-                      tabIndex={show3D ? -1 : 0}
+                      tabIndex={0}
                       aria-pressed={flipped}
                       aria-label={`Flip the ${flavor.name} pouch to see the ${flipped ? "front" : "back"}`}
                       className="mtsa-flip"
