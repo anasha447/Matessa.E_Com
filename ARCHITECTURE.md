@@ -115,17 +115,27 @@ database** — its own products, customers, admins, carts, orders, coupons and a
 Nothing is shared between stores except the code and the infrastructure.
 
 - **Which store:** every API request carries `X-Tenant-ID: <store>`. Each storefront's
-  server-side BFF sets it from a constant (`STORE_ID`, `lib/api/config.ts`); the browser
-  never chooses. A missing or unknown store is rejected with 400 — there is no default.
+  server-side BFF sets it from a constant in code (`STORE_ID`, `lib/api/config.ts` — not an
+  env var, so two builds can never be merged into one store); the browser never chooses. A
+  missing or unknown store is rejected with 400 at the gateway (`StoreGuardFilter`) and again
+  in every service. Reserved schema names (`public`, `pg_*`, `information_schema`) are refused
+  as store ids at boot.
+- **No default store:** once a service is ready, database or cache access without a store in
+  context throws (`TenancyConfig`, `CacheConfig`). The first store is used only while the app
+  boots (Spring Data / Hibernate metadata). A new `@Scheduled` job must loop with
+  `TenantContext.runAs`.
 - **Database:** each service's `TenantFilter` puts the store in context; Hibernate's
   multi-tenant connection provider sets the connection's `search_path` to that schema.
   Flyway migrates every store schema on boot and creates a new store's schema automatically.
-- **Auth:** user-service signs the store into the JWT (`tenant` claim). Every service rejects
-  a token whose store differs from the request's, so a login is valid in one store only.
+- **Auth:** user-service signs the store into the JWT (`tenant` claim). The gateway (403) and
+  every service reject a token whose store differs from the request's, so a login is valid in
+  one store only. Cookies are per storefront (`mt_*` / `ad_*`).
 - **Async and background work:** Kafka records carry the store in an `X-Tenant-ID` header
-  (stamped by the outbox pollers, restored by a record interceptor); outbox pollers and the
-  analytics refresher loop over every store; Feign forwards the header; Redis catalog keys
-  are prefixed with the store.
+  (stamped by the outbox pollers, restored by a record interceptor). A record with no known
+  store is refused by the listener and lands on `<topic>.DLT` — never dropped, never guessed.
+  Outbox pollers, the analytics refresher and the reservation expiry job loop over every store;
+  Feign forwards the header; Redis catalog keys are `cat:v1:<store>:…`; uploaded images are
+  stored under `<store>/…` and an image row may only point at its own store's uploads.
 - **Code:** each service has its own copy of the `tenant` package (§15 — no shared module).
 - **Adding a store:** append its id to `APP_TENANCY_TENANTS`, give user-service
   `APP_ADMINS_<STORE>_EMAIL` / `APP_ADMINS_<STORE>_PASSWORD` (the two existing stores use the
@@ -133,6 +143,51 @@ Nothing is shared between stores except the code and the infrastructure.
   admin are created on boot.
 - **Upgrading a pre-store database:** `backend/db-init/upgrades/001-split-stores.sql` moves the
   old `public` data into the `matessa` schema (run once per DB, services stopped).
+
+### 8.2 Checkout, scale-out and the VPS layout `[v1]`
+
+**Checkout is a small saga** (order-service `OrderServiceImpl.createOrder`), with no database
+transaction held across remote calls:
+
+1. **Idempotency key** (`Idempotency-Key` header, minted once per checkout page visit) is
+   recorded first in `idempotency_request`: same key + same request → the original order;
+   same key + different basket → 422 `IDEMPOTENCY_KEY_REUSED`; same key still running → 409
+   `REQUEST_IN_PROGRESS`; a failed attempt frees the key. Keys are purged after 24 h.
+2. **Reserve** on commercial-service (`POST /internal/reservations`, service key
+   `X-Internal-Key`) under a reservation id order-service generates. Stock is taken with a
+   guarded atomic decrement; the coupon use is claimed under a row lock that also enforces the
+   per-customer limit (`coupon_redemption`). Reserve and release are idempotent by id.
+3. **Pay.** Production (`SPRING_PROFILES_ACTIVE=prod`) accepts cash on delivery only until a
+   real provider with signed webhooks is added; the mock processor never loads there.
+4. **Persist** order + items + outbox event + idempotency result in one short transaction.
+
+Any failure after step 2 releases the reservation by id. If that release cannot be delivered
+(crash, timeout, commercial down), the reservation stays HELD and commercial-service's
+`ReservationExpiryJob` returns it after `reservation.ttl-minutes` (60). `OrderPlaced` confirms
+the reservation; `OrderCancelled` returns stock and the coupon use.
+
+**Running more than one replica** of any service is safe:
+- Outbox pollers claim rows with `FOR UPDATE SKIP LOCKED` — each event is published by one replica.
+- `@SchedulerLock` (ShedLock, table `public.shedlock` per service DB) runs each job on one
+  replica: analytics view refresh, reservation expiry, idempotency cleanup.
+- Product images live in an S3-compatible bucket (MinIO on the VPS, `APP_MEDIA_STORE=s3`),
+  served by commercial-service at `/media/<store>/<id>.webp`; the local-disk store is for dev.
+- Rate limiting is in Redis (one atomic Lua script per hit), keyed by store + real client IP.
+- The catalog cache fails open (Redis down → Postgres), clears with SCAN, evicts after commit.
+- Connection pool per instance is `DB_POOL_SIZE`; keep replicas × pool under Postgres
+  `max_connections`.
+
+**VPS layout** (`docker-compose.yml` + `docker-compose.prod.yml`):
+
+```
+internet ─▶ Caddy :80/:443 (TLS, sets X-Real-IP) ─▶ storefront BFFs (frontend, second-frontend)
+           ─▶ api-gateway (store guard, JWT, rate limit, breakers) ─▶ user / commercial / order
+           ─▶ Postgres (one DB per service, one schema per store) · Kafka · Redis · MinIO
+```
+
+Only Caddy publishes ports. The BFFs forward only allow-listed `/api` areas (never `/api/auth`,
+`/actuator`, `/internal`), refuse cross-site writes, and pass the gateway only the client IP
+Caddy wrote. Each service connects to Postgres as the non-superuser owner of its own database.
 
 ---
 

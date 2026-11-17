@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matessa Platform Audit</title>
+<meta name="description" content="Full-stack audit of the Matessa / Adventure platform: how the backend works, store isolation, security fixes, checkout saga, scale-out and verification results.">
+<style>
+:root {
+  --bg: #F9F7F3; --surface: #FFFFFF; --ink: #2F3B28; --body: #3F4A3A; --muted: #6B7466;
+  --line: #E4E0D6; --green: #3E5F2D; --green-soft: #E8F0E2; --orange: #C2500F; --orange-soft: #FBEADF;
+  --gold: #A58114; --code: #F1EEE6; --shadow: 0 1px 2px rgba(47,59,40,.06), 0 8px 24px rgba(47,59,40,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151A13; --surface: #1D2419; --ink: #EAF0E4; --body: #CED6C7; --muted: #98A390;
+    --line: #2E3829; --green: #8FBF6E; --green-soft: #243020; --orange: #F08A4B; --orange-soft: #3A2618;
+    --gold: #D9B64C; --code: #232B1F; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151A13; --surface: #1D2419; --ink: #EAF0E4; --body: #CED6C7; --muted: #98A390;
+  --line: #2E3829; --green: #8FBF6E; --green-soft: #243020; --orange: #F08A4B; --orange-soft: #3A2618;
+  --gold: #D9B64C; --code: #232B1F; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--body); font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+::selection { background: var(--green); color: var(--bg); }
+a { color: var(--green); text-underline-offset: 3px; }
+code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .88em; }
+code { background: var(--code); padding: .1em .35em; border-radius: 5px; }
+pre { background: var(--code); padding: 14px 16px; border-radius: 12px; overflow-x: auto; line-height: 1.5; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+header.hero { padding: 56px 0 28px; }
+h1 { color: var(--ink); font-size: clamp(30px, 4.6vw, 46px); line-height: 1.1; letter-spacing: -.02em; margin: 0 0 12px; text-wrap: balance; }
+h2 { color: var(--ink); font-size: clamp(22px, 2.8vw, 30px); letter-spacing: -.01em; margin: 56px 0 14px; scroll-margin-top: 72px; }
+h3 { color: var(--ink); font-size: 18px; margin: 28px 0 8px; }
+.lede { font-size: 18px; max-width: 70ch; }
+nav.toc { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+nav.toc .wrap { display: flex; gap: 6px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; scrollbar-width: none; }
+nav.toc a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 999px; }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--green-soft); color: var(--green); outline: none; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 28px 0 8px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
+.kpi b { display: block; color: var(--ink); font-size: 26px; font-variant-numeric: tabular-nums; }
+.kpi span { color: var(--muted); font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; }
+.tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.ok { background: var(--green-soft); color: var(--green); }
+.warn { background: var(--orange-soft); color: var(--orange); }
+.hi { background: var(--orange); color: #fff; }
+.mid { background: var(--orange-soft); color: var(--orange); }
+.lo { background: var(--code); color: var(--muted); }
+.muted { color: var(--muted); }
+figure { margin: 18px 0; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+svg text { font-family: ui-sans-serif, system-ui, sans-serif; }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px; overflow-x: auto; }
+ol.steps { padding-left: 22px; }
+ol.steps li { margin: 6px 0; }
+footer { margin: 64px 0 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<nav class="toc" aria-label="Sections"><div class="wrap">
+  <a href="#summary">Summary</a><a href="#system">How it works</a><a href="#services">Services</a>
+  <a href="#isolation">Store isolation</a><a href="#security">Security</a><a href="#checkout">Checkout</a>
+  <a href="#scale">Scale-out</a><a href="#stock">Stock model</a><a href="#frontend">Storefronts</a>
+  <a href="#tests">Verification</a><a href="#changes">Commits</a><a href="#open">Open items</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Matessa platform — full-stack audit &amp; hardening</h1>
+  <p class="lede">One Spring Boot backend serves two independent storefronts: <strong>Matessa</strong> (yerba mate, India) and <strong>Adventure</strong>. This report explains how the system works, what the audit found, every fix that was made, and what was verified. Branch <code>feat/store-isolation</code>, November 2026.</p>
+  <div class="kpis" id="kpis">
+    <div class="kpi"><b>77</b><span>backend tests, 0 failing</span></div><div class="kpi"><b>59 / 59</b><span>live end-to-end checks, both stores</span></div><div class="kpi"><b>3 High</b><span>security findings fixed</span></div><div class="kpi"><b>21</b><span>commits on this branch</span></div>
+  </div>
+</div></header>
+
+<main class="wrap">
+
+<h2 id="summary">Summary</h2>
+<div class="grid2">
+  <div class="card"><h3>Stores are separate</h3><p>Every product, customer, admin, cart, order, coupon and analytics view lives in a per-store Postgres schema inside each service's database. Tokens, cookies, cache keys, images and Kafka messages are all tagged with their store and refused anywhere else. The gaps the audit found — a silent default store, a public gateway that let callers pick the store, dropped Kafka records — are closed.</p></div>
+  <div class="card"><h3>Security</h3><p>Three high findings fixed: production no longer marks unpaid card orders as paid, the login rate limit can't be bypassed with a forged IP header, and the browser proxy no longer exposes raw tokens or internal endpoints. Ten medium and six low findings fixed or explicitly deferred.</p></div>
+  <div class="card"><h3>Checkout is correct under failure</h3><p>Stock and coupon uses are reserved under an id, released on every failure path, and expired if the order never arrives. One idempotency key per checkout visit means double clicks, retries and reloads can't create a second order.</p></div>
+  <div class="card"><h3>Ready to scale on a VPS</h3><p>Any service can run as several replicas: outbox rows are claimed with <code>SKIP LOCKED</code>, scheduled jobs take a cluster lock, images live in a shared bucket. Caddy is the only thing facing the internet.</p></div>
+</div>
+
+<h2 id="system">How the system works</h2>
+<figure class="diagram" role="img" aria-label="Request flow: browser to Caddy to storefront BFF to gateway to services to data stores">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:720px">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--muted)"/></marker>
+  </defs>
+  <g fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr)">
+    <path d="M110 70 H180"/><path d="M330 70 H390"/><path d="M560 70 H620"/>
+    <path d="M700 100 V150 H200 V190"/><path d="M700 100 V190"/><path d="M700 100 V150 H520 V190"/>
+    <path d="M520 240 H610" /><path d="M200 260 V320"/><path d="M520 260 V320"/><path d="M700 260 V320"/>
+  </g>
+  <g font-size="14" fill="var(--ink)">
+    <rect x="10" y="40" width="100" height="60" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="60" y="75" text-anchor="middle" font-weight="700">Browser</text>
+    <rect x="180" y="30" width="150" height="80" rx="12" fill="var(--green-soft)" stroke="var(--green)"/>
+    <text x="255" y="62" text-anchor="middle" font-weight="700">Caddy</text>
+    <text x="255" y="82" text-anchor="middle" font-size="12" fill="var(--muted)">TLS · sets X-Real-IP</text>
+    <rect x="390" y="30" width="170" height="80" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="475" y="58" text-anchor="middle" font-weight="700">Storefront BFF ×2</text>
+    <text x="475" y="78" text-anchor="middle" font-size="12" fill="var(--muted)">store id · allow-list</text>
+    <text x="475" y="94" text-anchor="middle" font-size="12" fill="var(--muted)">httpOnly session</text>
+    <rect x="620" y="30" width="170" height="70" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="705" y="58" text-anchor="middle" font-weight="700">API gateway</text>
+    <text x="705" y="78" text-anchor="middle" font-size="12" fill="var(--muted)">store guard · JWT · rate limit</text>
+    <rect x="110" y="190" width="180" height="70" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="200" y="220" text-anchor="middle" font-weight="700">user-service</text>
+    <text x="200" y="240" text-anchor="middle" font-size="12" fill="var(--muted)">accounts · RS256 tokens</text>
+    <rect x="430" y="190" width="180" height="70" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="520" y="220" text-anchor="middle" font-weight="700">commercial-service</text>
+    <text x="520" y="240" text-anchor="middle" font-size="12" fill="var(--muted)">catalog · stock · coupons</text>
+    <rect x="620" y="190" width="170" height="70" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="705" y="220" text-anchor="middle" font-weight="700">order-service</text>
+    <text x="705" y="240" text-anchor="middle" font-size="12" fill="var(--muted)">cart · checkout · orders</text>
+    <rect x="60" y="320" width="300" height="80" rx="12" fill="var(--code)" stroke="var(--line)"/>
+    <text x="210" y="352" text-anchor="middle" font-weight="700">Postgres</text>
+    <text x="210" y="372" text-anchor="middle" font-size="12" fill="var(--muted)">users · commercial · orders DBs</text>
+    <text x="210" y="388" text-anchor="middle" font-size="12" fill="var(--muted)">schema per store: matessa, adventure</text>
+    <rect x="420" y="320" width="200" height="80" rx="12" fill="var(--code)" stroke="var(--line)"/>
+    <text x="520" y="352" text-anchor="middle" font-weight="700">Redis · MinIO</text>
+    <text x="520" y="372" text-anchor="middle" font-size="12" fill="var(--muted)">catalog cache · rate limits</text>
+    <text x="520" y="388" text-anchor="middle" font-size="12" fill="var(--muted)">product images</text>
+    <rect x="640" y="320" width="150" height="80" rx="12" fill="var(--code)" stroke="var(--line)"/>
+    <text x="715" y="352" text-anchor="middle" font-weight="700">Kafka</text>
+    <text x="715" y="372" text-anchor="middle" font-size="12" fill="var(--muted)">order events</text>
+    <text x="715" y="388" text-anchor="middle" font-size="12" fill="var(--muted)">outbox → topics</text>
+    <rect x="820" y="190" width="170" height="70" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="905" y="220" text-anchor="middle" font-weight="700">Eureka</text>
+    <text x="905" y="240" text-anchor="middle" font-size="12" fill="var(--muted)">service discovery</text>
+  </g>
+</svg>
+<figcaption>Production on the VPS: only Caddy publishes ports (80/443). Browsers never reach the gateway or services; the storefront BFFs call the gateway over the internal Docker network. Order-service calls commercial-service directly (Feign, service key) to reserve stock.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li><strong>Browser → Caddy.</strong> TLS for <code>MATESSA_DOMAIN</code> and <code>ADVENTURE_DOMAIN</code>; Caddy overwrites <code>X-Forwarded-For</code>/<code>X-Real-IP</code> with the address it actually saw.</li>
+  <li><strong>Caddy → storefront (Next.js).</strong> Pages render server-side; the browser calls only same-origin routes. Sign-in tokens live in httpOnly cookies the browser's JavaScript can't read.</li>
+  <li><strong>BFF → gateway.</strong> <code>/api/bff/*</code> forwards only allow-listed areas, adds the store id (<code>X-Tenant-ID</code>, fixed in code), the bearer token from the cookie, and the client IP Caddy wrote. It refreshes an expired token once and retries.</li>
+  <li><strong>Gateway.</strong> Requires a known store, verifies the RS256 token (signature, issuer, expiry) and that it belongs to that store, rate-limits per store + client, then routes via Eureka with circuit breakers.</li>
+  <li><strong>Service.</strong> Re-checks store and token (defence in depth), sets the Postgres <code>search_path</code> to the store's schema, and does the work. Cross-service effects travel as Kafka events written through a transactional outbox.</li>
+</ol>
+
+<h2 id="services">The services</h2>
+<div class="tbl"><table>
+<thead><tr><th>Service</th><th>Owns</th><th>Key behaviour</th></tr></thead>
+<tbody>
+<tr><td><strong>api-gateway</strong></td><td>—</td><td>Store guard (400/403), JWT validation, Redis rate limits (atomic Lua), circuit breakers + time limits on every route, 503 fallbacks.</td></tr>
+<tr><td><strong>user-service</strong></td><td><code>users</code> DB: users, roles, addresses, refresh tokens</td><td>Only holder of the RS256 private key. Issues 15-minute access tokens with a <code>tenant</code> claim and rotating refresh tokens (hashed, family reuse detection). Per-account lockout. One seeded admin per store.</td></tr>
+<tr><td><strong>commercial-service</strong></td><td><code>commercial</code> DB: catalog, variants &amp; stock, images, reviews, wishlist, coupons, discounts, contact, subscribers, reservations</td><td>Prices every basket server-side. Holds stock and coupon uses as idempotent reservations; expires abandoned ones. Serves images from S3/MinIO. Redis cache that fails open.</td></tr>
+<tr><td><strong>order-service</strong></td><td><code>orders</code> DB: carts, orders, history, outbox, idempotency keys, analytics views</td><td>Runs the checkout saga (reserve → pay → persist), owns order lifecycle and staff management, publishes <code>OrderPlaced</code>/<code>OrderCancelled</code> via the outbox, refreshes sales analytics views.</td></tr>
+<tr><td><strong>eureka-server</strong></td><td>—</td><td>Service registry; the gateway and Feign resolve <code>lb://</code> names through it.</td></tr>
+</tbody></table></div>
+
+<h2 id="isolation">Store isolation</h2>
+<p>Each store is a schema in every service database. The table shows how each layer keeps them apart and what changed.</p>
+<div class="tbl"><table>
+<thead><tr><th>Layer</th><th>How it is separated</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Data</td><td>Hibernate multi-tenant connection provider → <code>search_path = &lt;store&gt;</code>; Flyway migrates every store schema. No default store once the app is ready.</td><td><span class="pill ok">Fixed: silent fallback removed</span></td></tr>
+<tr><td>Edge</td><td>Gateway requires a known <code>X-Tenant-ID</code> and rejects a token from another store; gateway no longer published.</td><td><span class="pill ok">Fixed</span></td></tr>
+<tr><td>Auth</td><td><code>tenant</code> claim in every token, checked by gateway + all services; per-store cookies <code>mt_*</code>/<code>ad_*</code>; same email can exist in both stores.</td><td><span class="pill ok">Verified by tests</span></td></tr>
+<tr><td>Storefronts</td><td><code>STORE_ID</code> fixed in code (no env override); second storefront images through its own origin.</td><td><span class="pill ok">Fixed</span></td></tr>
+<tr><td>Kafka</td><td>Store header on every record; a record without one goes to <code>&lt;topic&gt;.DLT</code>.</td><td><span class="pill ok">Fixed: was dropped</span></td></tr>
+<tr><td>Cache / rate limits</td><td><code>cat:v1:&lt;store&gt;:…</code> keys; rate-limit keys include the store.</td><td><span class="pill ok">Fixed</span></td></tr>
+<tr><td>Images</td><td>Stored as <code>&lt;store&gt;/&lt;id&gt;.webp</code>; an image row may point only at its own store's uploads.</td><td><span class="pill ok">Fixed: shared folder before</span></td></tr>
+<tr><td>Background jobs</td><td>Outbox pollers, analytics refresh, reservation expiry, key cleanup loop over stores with an explicit store context.</td><td><span class="pill ok">Verified</span></td></tr>
+<tr><td>DB roles</td><td>One role per service owns all its store schemas.</td><td><span class="pill warn">By design — per-store roles later</span></td></tr>
+</tbody></table></div>
+
+<h2 id="security">Security findings</h2>
+<div class="tbl"><table>
+<thead><tr><th>Sev</th><th>Finding</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><span class="pill hi">High</span></td><td>Mock payment marked every card/online order PAID, in production too.</td><td>Mock is <code>!prod</code> only; production accepts cash on delivery until a real provider exists; checkout shows only live methods.</td></tr>
+<tr><td><span class="pill hi">High</span></td><td>BFF forwarded the browser's <code>X-Forwarded-For</code>: a new fake IP per request reset the login rate limit.</td><td>BFF forwards only Caddy's <code>X-Real-IP</code>; gateway trusts only the compose subnet; 5 failed sign-ins lock an account for 15 minutes.</td></tr>
+<tr><td><span class="pill hi">High</span></td><td>BFF forwarded any path: page JavaScript could read a 7-day refresh token from <code>/api/auth/refresh</code> and reach <code>/actuator</code>.</td><td>Allow-list of gateway areas; <code>..</code> and encoded slashes refused.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>Refresh tokens stored in plain text, replay undetected.</td><td>SHA-256 at rest; rotation families; replay revokes the family.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>Login timing / message revealed whether an account exists.</td><td>Dummy BCrypt on unknown email, identical answer; register no longer echoes the email.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>No CSRF / Origin check on session and BFF writes.</td><td><code>Sec-Fetch-Site</code>/Origin check; JSON or multipart only.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>Open redirect after login (<code>?next=https://evil</code>).</td><td>Same-site paths only.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>No limits on quantities/lines; fake COD orders could hold all stock.</td><td>≤20 per line, ≤50 lines; checkout rate limit; abandoned reservations expire.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>Guest checkout bypassed per-customer coupon limits; concurrent use race.</td><td>Counted per email/user under a row lock in commercial-service.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>No security headers (clickjacking of admin).</td><td>CSP, <code>frame-ancestors 'none'</code>, nosniff, referrer/permissions policy, HSTS in prod.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>user-service connected as the Postgres superuser.</td><td>Dedicated superuser for admin only; every service role is a plain owner of its own DB (verified on a fresh volume).</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>Forced password change only enforced in the UI.</td><td>Tokens carry no roles until the password is changed.</td></tr>
+<tr><td><span class="pill mid">Med</span></td><td>No image size limit (decompression bombs).</td><td>4096 px per side, read from the header before decoding.</td></tr>
+<tr><td><span class="pill lo">Low</span></td><td><code>/internal/**</code> open to anything on the network.</td><td>Shared service key (<code>X-Internal-Key</code>).</td></tr>
+<tr><td><span class="pill lo">Low</span></td><td>Guessable order numbers (timestamp).</td><td><code>MA261116-7K3QXD</code>: store + day + 30 random bits.</td></tr>
+<tr><td><span class="pill lo">Low</span></td><td>Case-sensitive emails; staff input gaps; guest contact/newsletter got 401.</td><td>Lower-cased emails; price ≥ 0, percentage ≤ 100; public forms allowed.</td></tr>
+<tr><td><span class="pill lo">Dep</span></td><td>Next.js 16.2.9 had a critical advisory; 5 transitive advisories.</td><td>Next 16.4.6 (minor); production <code>npm audit</code> is clean in both apps.</td></tr>
+</tbody></table></div>
+
+<h2 id="checkout">Checkout: the saga</h2>
+<figure class="diagram" role="img" aria-label="Checkout sequence with idempotency, reserve, pay, persist and compensation">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:720px">
+  <g font-size="13.5" fill="var(--ink)">
+    <g>
+      <rect x="10" y="40" width="170" height="90" rx="12" fill="var(--green-soft)" stroke="var(--green)"/>
+      <text x="95" y="70" text-anchor="middle" font-weight="700">1 · Idempotency</text>
+      <text x="95" y="92" text-anchor="middle" font-size="12" fill="var(--muted)">key minted on page load</text>
+      <text x="95" y="110" text-anchor="middle" font-size="12" fill="var(--muted)">replay · 422 · 409</text>
+    </g>
+    <g>
+      <rect x="215" y="40" width="190" height="90" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="310" y="70" text-anchor="middle" font-weight="700">2 · Reserve (id)</text>
+      <text x="310" y="92" text-anchor="middle" font-size="12" fill="var(--muted)">stock − qty, coupon use</text>
+      <text x="310" y="110" text-anchor="middle" font-size="12" fill="var(--muted)">idempotent by reservation id</text>
+    </g>
+    <g>
+      <rect x="440" y="40" width="150" height="90" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="515" y="70" text-anchor="middle" font-weight="700">3 · Pay</text>
+      <text x="515" y="92" text-anchor="middle" font-size="12" fill="var(--muted)">prod: COD only</text>
+    </g>
+    <g>
+      <rect x="625" y="40" width="200" height="90" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="725" y="70" text-anchor="middle" font-weight="700">4 · Persist (1 tx)</text>
+      <text x="725" y="92" text-anchor="middle" font-size="12" fill="var(--muted)">order + items + outbox</text>
+      <text x="725" y="110" text-anchor="middle" font-size="12" fill="var(--muted)">+ key marked done</text>
+    </g>
+    <g>
+      <rect x="860" y="40" width="130" height="90" rx="12" fill="var(--green-soft)" stroke="var(--green)"/>
+      <text x="925" y="70" text-anchor="middle" font-weight="700">OrderPlaced</text>
+      <text x="925" y="92" text-anchor="middle" font-size="12" fill="var(--muted)">confirms</text>
+      <text x="925" y="110" text-anchor="middle" font-size="12" fill="var(--muted)">reservation</text>
+    </g>
+    <rect x="215" y="190" width="610" height="80" rx="12" fill="var(--orange-soft)" stroke="var(--orange)"/>
+    <text x="520" y="220" text-anchor="middle" font-weight="700" fill="var(--orange)">Any failure after step 2 → release(reservation id) + free the key</text>
+    <text x="520" y="244" text-anchor="middle" font-size="12" fill="var(--muted)">If even the release can't be delivered, the expiry job returns the stock after 60 minutes.</text>
+  </g>
+  <g fill="none" stroke="var(--muted)" stroke-width="1.6">
+    <path d="M180 85 H215"/><path d="M405 85 H440"/><path d="M590 85 H625"/><path d="M825 85 H860"/>
+    <path d="M515 130 V190" stroke-dasharray="4 4"/><path d="M725 130 V190" stroke-dasharray="4 4"/>
+  </g>
+</svg>
+<figcaption>No database transaction or connection is held across the remote reserve and payment calls; only step 4 is a (short) transaction.</figcaption>
+</figure>
+<div class="grid2">
+  <div class="card"><h3>On the checkout page</h3><p>The key is created once when the page loads and reused by every submit from that visit. Once a request has gone out with an unknown outcome, the key is locked: changing the basket then gets <code>422 IDEMPOTENCY_KEY_REUSED</code> and a "check your orders" prompt instead of a possible duplicate. One request in flight, a 20-second timeout, a leave-page warning only while submitting, and success replaces history so Back can't resubmit.</p></div>
+  <div class="card"><h3>Guards (Matessa)</h3><p>Empty cart → <code>/cart</code>. The basket is re-priced on arrival; unavailable lines, over-stock or over-limit lines and price changes are listed with one "update my basket" button, and ordering is blocked until fixed. Indian mobile and PIN code are validated inline; the form survives a reload or a mid-checkout sign-in.</p></div>
+</div>
+
+<h2 id="scale">Scale-out on the VPS</h2>
+<div class="tbl"><table>
+<thead><tr><th>Concern</th><th>Before</th><th>Now</th></tr></thead>
+<tbody>
+<tr><td>Outbox publishing</td><td>Every replica published the same 50 rows</td><td><code>FOR UPDATE SKIP LOCKED</code> claims; batched sends</td></tr>
+<tr><td>Scheduled jobs</td><td>Ran on every replica</td><td>ShedLock: analytics refresh, reservation expiry, key cleanup run once</td></tr>
+<tr><td>Product images</td><td>Local disk of one container</td><td>S3-compatible bucket (MinIO), served by commercial-service</td></tr>
+<tr><td>Rate limiting</td><td>INCR + EXPIRE could leave a key that never expires</td><td>Single Lua script, store-scoped key</td></tr>
+<tr><td>Catalog cache</td><td>KEYS on clear, evict before commit, 500 when Redis down</td><td>SCAN, transaction-aware, fails open</td></tr>
+<tr><td>Catalog routes</td><td>No circuit breaker</td><td>Breaker + 15 s limit + 503 fallback</td></tr>
+<tr><td>Connections</td><td>Default pool; connection held across remote calls</td><td><code>DB_POOL_SIZE</code>; no connection held during reserve/pay</td></tr>
+<tr><td>Orders list</td><td>Index on user only</td><td><code>(user_id, created_at desc)</code></td></tr>
+</tbody></table></div>
+<p class="muted">Scaling a service: remove its fixed <code>container_name</code>/port and run <code>docker compose up -d --scale commercial-service=3</code>; Eureka load-balances. Keep replicas × <code>DB_POOL_SIZE</code> across all services under Postgres <code>max_connections</code>.</p>
+
+<h2 id="stock">Stock model</h2>
+<p>Stock lives on variants — one stock path for cart, checkout and reservations. A product <strong>without variations</strong> gets one hidden <em>default</em> variant when it is created; that variant holds the product's own stock. Adding the first real variation (size/colour) retires it, and each variation carries its own stock; removing the last variation brings the default back at stock 0. Admins see it as "Product stock (no variations)", which can be edited but not deleted. Existing products without any variant received a default variant (stock 0) in migration V8.</p>
+
+<h2 id="frontend">Storefronts</h2>
+<div class="grid2">
+  <div class="card"><h3>Why Drink Mate? (soft edit)</h3><p>Same six reasons and copy. A stem grows beside the titles as you scroll and leaves unfurl at each reason; copy wipes in; titles are clickable steps; phones get a "03 / 06" counter with a dot stem; reduced motion keeps the static list.</p></div>
+  <div class="card"><h3>3D hero</h3><p>Two-sided 3D pouches for Masala and Lemon &amp; Ginger with orbiting ingredients, a CSS fallback for low-power devices and reduced motion; three.js loads only after first paint.</p></div>
+</div>
+
+<h2 id="tests">Verification</h2>
+<p>Run on 17 Nov 2026: the backend test suites (Testcontainers, real Postgres/Kafka/Redis), then the full stack in Docker
+(Postgres, Redis, Kafka, Eureka, gateway, three services) with both storefronts, driven through their BFFs exactly like a browser.</p>
+<h3>Backend test suites</h3>
+<div class="tbl"><table><thead><tr><th>Service</th><th>Tests</th><th>Skipped</th><th>Result</th></tr></thead><tbody><tr><td><code>eureka-server</code></td><td>1</td><td>—</td><td><span class="pill ok">Pass</span></td></tr><tr><td><code>api-gateway</code></td><td>19</td><td>—</td><td><span class="pill ok">Pass</span></td></tr><tr><td><code>user-service</code></td><td>13</td><td>—</td><td><span class="pill ok">Pass</span></td></tr><tr><td><code>commercial-service</code></td><td>26</td><td>1 skipped — S3 test needs a MinIO image this network cannot pull</td><td><span class="pill ok">Pass</span></td></tr><tr><td><code>order-service</code></td><td>18</td><td>—</td><td><span class="pill ok">Pass</span></td></tr></tbody></table></div>
+<h3>Live end-to-end checks</h3>
+<div class="tbl"><table><thead><tr><th>Area</th><th>What was checked</th><th>Passed</th></tr></thead><tbody><tr><td>matessa</td><td>admin login; admin creates category; admin creates product with own stock (no variations); product stock lives on hidden default variant (5); customer register; logout; customer login; payment methods public; add to cart; registered checkout (COD); replay same key returns the same order; same key + different body -&gt; 422; order history shows it; guest checkout (COD); guest order tracking; tracking with wrong email refused; stock decremented 5 -&gt; 2 after 3 units ordered; overselling refused (3 &gt; 2 in stock); quantity &gt; 20 per line refused; customer cannot create category; BFF refuses /api/auth/*; BFF refuses /actuator; BFF refuses encoded traversal; cross-site POST rejected; security headers on pages</td><td><span class="pill ok">25/25</span></td></tr><tr><td>adventure</td><td>admin login; admin creates category; admin creates product with own stock (no variations); product stock lives on hidden default variant (5); customer register; logout; customer login; payment methods public; add to cart; registered checkout (COD); replay same key returns the same order; same key + different body -&gt; 422; order history shows it; guest checkout (COD); guest order tracking; tracking with wrong email refused; stock decremented 5 -&gt; 2 after 3 units ordered; overselling refused (3 &gt; 2 in stock); quantity &gt; 20 per line refused; customer cannot create category; BFF refuses /api/auth/*; BFF refuses /actuator; BFF refuses encoded traversal; cross-site POST rejected; security headers on pages</td><td><span class="pill ok">25/25</span></td></tr><tr><td>cross-store</td><td>matessa product slug not visible on adventure; adventure product slug not visible on matessa; matessa customer cannot log in on adventure; matessa session cookie refused by adventure</td><td><span class="pill ok">4/4</span></td></tr><tr><td>gateway</td><td>no store header -&gt; 400; unknown/reserved store -&gt; 400; direct login works; matessa token on adventure store -&gt; 403; after 5 failures (spoofed XFF each time) the right password is refused - account locked</td><td><span class="pill ok">5/5</span></td></tr></tbody></table></div>
+<h3>What the live run found and fixed</h3>
+<div class="tbl"><table><thead><tr><th>Finding</th><th>Fix</th></tr></thead><tbody>
+<tr><td>A signed-in shopper retrying a checkout that had already succeeded (lost response) got "Cart is empty" instead of the order — the order had emptied the cart.</td><td>The finished idempotency key is looked up before the cart; the same request returns the original order, a different one still gets 422. Regression test added.</td></tr>
+<tr><td>The first checkout after a restart timed out reserving stock (3&nbsp;s limit on a cold service); the release timed out too, so stock stayed held until the expiry job.</td><td>Reserve/release get their own 8&nbsp;s limit (<code>CHECKOUT_RESERVE_TIMEOUT</code>). The held stock was returned by the expiry job as designed — nothing was lost.</td></tr>
+</tbody></table></div>
+<p>Also confirmed live: every placed order's stock reservation reached CONFIRMED through Kafka; an empty-cart visit to <code>/checkout</code> redirects to <code>/cart</code>; both storefronts build and render with no app console errors.</p>
+
+<h2 id="changes">Commits on this branch</h2>
+<div class="tbl"><table><thead><tr><th>Commit</th><th>Change</th></tr></thead><tbody><tr><td><code>82878a9</code></td><td>fix(checkout): a retry after success returns the order; reserve/release get 8s</td></tr><tr><td><code>6e7a1c6</code></td><td>chore(deps): Next.js 16.4.6 and safe audit fixes in both storefronts</td></tr><tr><td><code>42d1d3b</code></td><td>feat(catalog): product-level stock for products without variations</td></tr><tr><td><code>df91868</code></td><td>feat(scale): safe to run replicas; VPS deployment behind Caddy</td></tr><tr><td><code>0b08318</code></td><td>feat(checkout): reservation saga, idempotency records, COD-only production payments</td></tr><tr><td><code>6eccf61</code></td><td>fix(tenancy): no default store, reserved ids refused, storeless Kafka records to DLT</td></tr><tr><td><code>e77a851</code></td><td>fix(auth): hash refresh tokens, detect reuse, lock brute force, gate temp passwords</td></tr><tr><td><code>950c4c8</code></td><td>fix(storefronts): lock down the BFF and session routes</td></tr><tr><td><code>5fd5bd2</code></td><td>feat(checkout): one idempotency key per visit and standard checkout guards</td></tr><tr><td><code>8cfb635</code></td><td>fix(gateway): enforce the store at the edge and harden rate limiting</td></tr><tr><td><code>7f991f9</code></td><td>feat(tenancy): one schema per store across all services</td></tr><tr><td><code>be9f9a6</code></td><td>feat(home): give Why Drink Mate a growing stem and wipe-in reasons</td></tr><tr><td><code>1a48b13</code></td><td>feat(hero): 3D turning pouch with orbiting ingredients</td></tr><tr><td><code>a1c2a67</code></td><td>fix(checkout): reserve stock and the coupon use before taking payment</td></tr><tr><td><code>5ffe194</code></td><td>test(gateway): add the ClientIpResolver suite</td></tr><tr><td><code>81ea866</code></td><td>fix(docker): publish only the public entry points in deployment</td></tr><tr><td><code>18ad519</code></td><td>fix(checkout): make the idempotency key survive a page reload</td></tr><tr><td><code>4747945</code></td><td>fix(gateway): rate-limit per real client, and cover the open endpoints</td></tr><tr><td><code>dfba268</code></td><td>fix(security): validate the JWT issuer in all four decoders</td></tr><tr><td><code>6fc50bb</code></td><td>fix(commercial): stop handing out an existing subscriber&#x27;s coupon code</td></tr><tr><td><code>1d22ad3</code></td><td>fix(order): scope the idempotency-key lookup to the caller</td></tr></tbody></table></div><p>The documentation commit (this report, <code>AUDIT-FOLLOWUP.md</code>, ARCHITECTURE/CLAUDE updates) follows these.</p>
+
+<h2 id="open">Open items for you</h2>
+<div class="tbl"><table>
+<thead><tr><th>Item</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>Real payment provider (e.g. Razorpay)</td><td>Production takes COD only. Orders must become PAID only from a signature-verified webhook.</td></tr>
+<tr><td>Health-claim copy</td><td>"May help protect against heart disease" on the home page is a medical claim — needs review against advertising rules.</td></tr>
+<tr><td>Email verification</td><td>Without it, sign-up reveals that an account exists and the newsletter mints a welcome coupon per unverified address.</td></tr>
+<tr><td>libwebp in <code>webp-imageio 0.2.2</code></td><td>Confirm the bundled native library is ≥ 1.3.2 (CVE-2023-4863) or move to a maintained encoder.</td></tr>
+<tr><td>Verified-purchase reviews</td><td>Needs an internal "has this user bought this product" call to order-service.</td></tr>
+<tr><td>Second storefront</td><td>Stub products show when the backend is empty — to be handled with <code>adventure.refactor.md</code>.</td></tr>
+</tbody></table></div>
+
+<footer>Detailed tracker: <code>AUDIT-FOLLOWUP.md</code>. Design reference: <code>ARCHITECTURE.md</code> §8.1–8.2, <code>DATA-MODEL.md</code> rule 7.</footer>
+</main>
+</body>
+</html>

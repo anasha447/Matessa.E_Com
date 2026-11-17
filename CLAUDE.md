@@ -17,6 +17,7 @@ Canonical references — SCAN BEFORE WRITING ANY CODE
 These are the source of truth. Before generating, editing, or reviewing code, read the ones relevant to the task. Do not improvise around them; if you believe one is wrong, raise it with the human rather than silently diverging. This file (CLAUDE.md) is the hub/index — each doc below is the authority for its area.
 
 DocAuthority overRead it when…DATA-MODEL.mdentities, fields, relationships, ownership, per-service DB split, shared-code policythe task touches data, persistence, or entity shapeARCHITECTURE.mdservices, infra, security (RS256 JWT filter chain), API conventions, Kafka, Docker, v1-vs-later phase tagsthe task touches services, security, API design, infra, or messagingapi.mdAPI endpoints, request/response shapes, error contractbuilding/consuming any API, or typing frontend props/dataBRAND.mdbrand identity — palette meaning, typography, voice, logo rules, imagery, guardrails (the what/why)any visual, copy, or brand-facing workDESIGN-SYSTEM.mdfrontend execution — design tokens, components, layout, mobile→desktop handoff, motion, hero animation, innovations (the how)building or styling any frontend UIFRONTEND-BUILD.mdtranslating the Claude Design HTML/Tailwind output into the Next.js app — process & code conventionsdoing the design→Next.js translation specifically
+AUDIT-FOLLOWUP.mdstatus of the Nov 2026 full-stack audit (store isolation, security, scale-out, checkout) — what is fixed, deferred, open; how to run the tests; how to deploy on the VPStouching auth, checkout, tenancy/stores, the BFFs, deployment, or picking up open audit itemsadventure.refactor.md (to be supplied)the second storefront (`second-frontend/`, store `adventure`) refactor planworking on second-frontend once the file exists
 
 Quick routing:
 
@@ -25,6 +26,7 @@ Entities/data → DATA-MODEL.md. Services/security/infra/messaging → ARCHITECT
 Any API work, frontend or backend → also api.md.
 Any frontend work → BRAND.md (identity) + DESIGN-SYSTEM.md (execution). If specifically translating the Claude Design output → also FRONTEND-BUILD.md.
 When unsure which apply, they're listed above — open the relevant ones before coding.
+Auth, checkout, stores/tenancy, BFF, deployment → also AUDIT-FOLLOWUP.md (open items + test/deploy recipes) and ARCHITECTURE.md §8.1–§8.2.
 
 
 
@@ -65,6 +67,8 @@ Boilerplate: MapStruct (entity↔DTO) + Lombok.
 API docs: springdoc-openapi per service (each declares its own dependency — do NOT centralize it in a shared module).
 Resilience: Resilience4j on Feign calls (timeouts, circuit breakers).
 Tests: Testcontainers for integration tests against real Postgres/Kafka.
+Running backend tests here: JAVA_HOME must point at JDK 25 (Maven reads JAVA_HOME, not PATH); on this Windows host also disable Ryuk and prefer IPv6 localhost — exact recipe in AUDIT-FOLLOWUP.md §6.
+Deployment target: a single VPS with Docker Compose; Caddy is the only public entry (docker-compose.prod.yml, deploy/Caddyfile).
 
 
 
