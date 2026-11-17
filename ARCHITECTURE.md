@@ -168,7 +168,7 @@ the reservation; `OrderCancelled` returns stock and the coupon use.
 
 **Running more than one replica** of any service is safe:
 - Outbox pollers claim rows with `FOR UPDATE SKIP LOCKED` — each event is published by one replica.
-- `@SchedulerLock` (ShedLock, table `public.shedlock` per service DB) runs each job on one
+- `@SchedulerLock` (ShedLock, table `scheduling.shedlock` per service DB) runs each job on one
   replica: analytics view refresh, reservation expiry, idempotency cleanup.
 - Product images live in an S3-compatible bucket (MinIO on the VPS, `APP_MEDIA_STORE=s3`),
   served by commercial-service at `/media/<store>/<id>.webp`; the local-disk store is for dev.
